@@ -3,7 +3,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#elif !defined(__APPLE__)
+#elif defined(__APPLE__)
+// macOS has no portable per-thread CPU affinity API; the guard is a no-op.
+#else
 #include <sched.h>
 #endif
 
@@ -12,7 +14,9 @@ private:
 #ifdef _WIN32
 	DWORD_PTR savedAffinity;
 	HANDLE threadHandle;
-#elif !defined(__APPLE__)
+#elif defined(__APPLE__)
+	// no affinity state to track on macOS
+#else
 	cpu_set_t savedAffinity;
 	pid_t tid;
 #endif
