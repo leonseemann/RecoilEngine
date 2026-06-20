@@ -1,52 +1,93 @@
-/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+/* This file is part of the Recoil engine (GPL v2 or later), see LICENSE.html */
 
 #include "System/Platform/CpuTopology.h"
-
 #include <sys/sysctl.h>
-#include <sys/types.h>
+#include <thread>
 
 namespace cpu_topology {
 
-static uint32_t SysctlU32(const char* name, uint32_t def = 0) {
-	uint64_t v64 = 0; size_t len = sizeof(v64);
-	if (sysctlbyname(name, &v64, &len, nullptr, 0) != 0)
-		return def;
-	if (len == sizeof(uint32_t)) {
-		uint32_t v32; __builtin_memcpy(&v32, &v64, sizeof(v32));
-		return v32;
-	}
-	return static_cast<uint32_t>(v64);
+namespace {
+
+// Read an unsigned sysctl value by name. Returns 0 if the key is unavailable
+// (e.g. perflevel keys on Intel Macs or pre-Apple-Silicon kernels).
+unsigned int ReadSysctlUInt(const char* name) {
+	int value = 0;
+	size_t valueSize = sizeof(value);
+	if (sysctlbyname(name, &value, &valueSize, nullptr, 0) != 0)
+		return 0;
+	return (value > 0) ? static_cast<unsigned int>(value) : 0;
 }
 
-static uint32_t MakeMask(uint32_t first, uint32_t count) {
-	const uint64_t bits = (count >= 32) ? ~0ull : ((1ull << count) - 1);
-	return static_cast<uint32_t>(bits << first);
+unsigned int BitsForCount(unsigned int n) {
+	if (n == 0) return 0;
+	if (n >= 32) return 0xFFFFFFFFu;
+	return (1u << n) - 1u;
 }
+
+} // namespace
 
 ThreadPinPolicy GetThreadPinPolicy() {
+	// macOS has no pthread_setaffinity_np equivalent. Scheduling locality is
+	// instead expressed via QOS classes; see Platform/Mac/ThreadSupport.cpp.
 	return THREAD_PIN_POLICY_NONE;
 }
 
 ProcessorMasks GetProcessorMasks() {
-	ProcessorMasks masks;
-	// without performance levels (Intel) all cores count as performance cores
-	const uint32_t perf = SysctlU32("hw.perflevel0.logicalcpu", SysctlU32("hw.logicalcpu", 1));
-	const uint32_t eff  = SysctlU32("hw.perflevel1.logicalcpu", 0);
-	// cpu ids are not ordered by perf level; masks are only used as counts
-	masks.performanceCoreMask = MakeMask(0, perf);
-	masks.efficiencyCoreMask  = MakeMask(perf, eff);
+	ProcessorMasks masks{};
+
+	// Apple Silicon exposes per-perflevel core counts. perflevel0 is the
+	// high-performance (P) cluster; perflevel1, when present, is the
+	// efficiency (E) cluster. Intel Macs and older kernels do not expose
+	// these keys; fall back to treating every core as a P-core there.
+	const unsigned int numPCores = ReadSysctlUInt("hw.perflevel0.physicalcpu");
+	const unsigned int numECores = ReadSysctlUInt("hw.perflevel1.physicalcpu");
+
+	if (numPCores > 0) {
+		masks.performanceCoreMask = BitsForCount(numPCores);
+		// E-cores occupy the bits above the P-cores in the combined mask.
+		const unsigned int totalCores = numPCores + numECores;
+		const unsigned int allMask = BitsForCount(totalCores);
+		masks.efficiencyCoreMask = allMask & ~masks.performanceCoreMask;
+	} else {
+		// Intel Mac / unknown topology: treat the visible core count as
+		// homogeneous P-cores. Matches prior behavior on those targets.
+		unsigned int numCores = std::thread::hardware_concurrency();
+		if (numCores == 0) numCores = 4;
+		masks.performanceCoreMask = BitsForCount(numCores);
+		masks.efficiencyCoreMask = 0;
+	}
+
+	// macOS does not expose SMT/HT details; report all visible cores as
+	// hyper-thread-low so callers consuming those masks stay consistent.
+	masks.hyperThreadLowMask = masks.performanceCoreMask | masks.efficiencyCoreMask;
+	masks.hyperThreadHighMask = 0;
+
 	return masks;
 }
 
 ProcessorCaches GetProcessorCache() {
 	ProcessorCaches caches;
+
 	ProcessorGroupCaches group;
-	group.groupMask = MakeMask(0, SysctlU32("hw.logicalcpu", 1));
-	group.cacheSizes[0] = SysctlU32("hw.l1dcachesize");
-	group.cacheSizes[1] = SysctlU32("hw.l2cachesize");
-	group.cacheSizes[2] = SysctlU32("hw.l3cachesize");
+	unsigned int numCores = std::thread::hardware_concurrency();
+	if (numCores == 0) numCores = 4;
+	group.groupMask = BitsForCount(numCores);
+
+	// Try to get cache sizes via sysctl
+	size_t size = sizeof(uint64_t);
+	uint64_t cacheSize = 0;
+
+	if (sysctlbyname("hw.l1dcachesize", &cacheSize, &size, nullptr, 0) == 0)
+		group.cacheSizes[0] = static_cast<uint32_t>(cacheSize);
+
+	if (sysctlbyname("hw.l2cachesize", &cacheSize, &size, nullptr, 0) == 0)
+		group.cacheSizes[1] = static_cast<uint32_t>(cacheSize);
+
+	if (sysctlbyname("hw.l3cachesize", &cacheSize, &size, nullptr, 0) == 0)
+		group.cacheSizes[2] = static_cast<uint32_t>(cacheSize);
+
 	caches.groupCaches.push_back(group);
 	return caches;
 }
 
-}
+} // namespace cpu_topology
