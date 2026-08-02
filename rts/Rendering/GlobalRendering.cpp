@@ -1463,8 +1463,8 @@ void CGlobalRendering::SetFullScreen(bool cliWindowed, bool cliFullScreen)
 {
 	const bool cfgFullScreen = configHandler->GetBool("Fullscreen");
 
-	fullScreen = (cfgFullScreen && !cliWindowed  );
-	fullScreen = (cfgFullScreen ||  cliFullScreen);
+	// --window beats --fullscreen, either beats the config
+	fullScreen = (cfgFullScreen || cliFullScreen) && !cliWindowed;
 
 	configHandler->Set("Fullscreen", fullScreen);
 }
