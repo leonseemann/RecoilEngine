@@ -41,6 +41,13 @@ cp -R "$BUILD_DIR/base" "$ENGINE/"
 cp -R "$SRC_DIR/cont/fonts" "$SRC_DIR/cont/LuaUI" "$SRC_DIR/cont/cmdcolors.txt" "$SRC_DIR/cont/ctrlpanel.txt" "$SRC_DIR/cont/luaui.lua" "$ENGINE/"
 cp "$BUILD_DIR/VERSION" "$SRC_DIR/installer/Mac/bar/fonts.conf" "$ENGINE/"
 
+# skirmish AIs, if they were built
+for ai in AI/Interfaces/C AI/Skirmish/NullAI AI/Skirmish/BARb; do
+	if [ -f "$BUILD_DIR/$ai/cmake_install.cmake" ]; then
+		cmake -DCMAKE_INSTALL_PREFIX="$ENGINE" -P "$BUILD_DIR/$ai/cmake_install.cmake"
+	fi
+done
+
 # Mesa EGL + Zink + KosmicKrisp, loaded by MacEGLBridge from <engine>/mesa
 cat > "$ENGINE/mesa/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json" <<EOF
 {

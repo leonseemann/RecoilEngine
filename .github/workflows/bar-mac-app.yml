@@ -12,7 +12,6 @@
 name: BAR macOS app
 on:
   workflow_dispatch:
-  pull_request:
   push:
     branches:
       - 'macos-port-*'
@@ -25,7 +24,7 @@ permissions:
 jobs:
   build:
     if: github.repository != 'beyond-all-reason/RecoilEngine'
-    runs-on: macos-26
+    runs-on: macos-15
     env:
       ENGINE_VERSION: '2026.07.04'
       HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_P12 != 'CHANGE_ME' }}
@@ -46,12 +45,10 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DVERSION_OVERRIDE="$ENGINE_VERSION" \
-            -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
-            -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
-            -DAI_TYPES=NONE \
+            -DAI_TYPES=NATIVE \
             -DBUILD_spring-dedicated=OFF \
             -DBUILD_spring-headless=OFF
-          cmake --build build --target spring unitsync pr-downloader_cli basecontent
+          cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
 
       - name: Import signing certificate
         if: env.HAS_CERT == 'true'
@@ -73,11 +70,7 @@ jobs:
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Bundle app
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
-            export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
-          fi
-          MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+        run: MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
 
       - name: Notarize
         if: env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
