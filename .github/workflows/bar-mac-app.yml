@@ -2,7 +2,7 @@
 # Silicon, signs and notarizes it when the Developer ID secrets are set and
 # publishes the DMG as a GitHub release for tags matching bar-mac-v*.
 #
-# Secrets (all optional, without them the app is ad-hoc signed):
+# Secrets (all optional, without them or set to CHANGE_ME the app is ad-hoc signed):
 #   MACOS_CERT_P12         base64 of the exported "Developer ID Application" .p12
 #   MACOS_CERT_PASSWORD    password of that .p12
 #   APPLE_ID               Apple ID used for notarization
@@ -25,8 +25,8 @@ jobs:
     runs-on: macos-15
     env:
       ENGINE_VERSION: '2026.07.04'
-      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
-      HAS_NOTARY: ${{ secrets.APPLE_APP_PASSWORD != '' }}
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_P12 != 'CHANGE_ME' }}
+      HAS_NOTARY: ${{ secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_APP_PASSWORD != 'CHANGE_ME' }}
     steps:
       - uses: actions/checkout@v4
         with:
