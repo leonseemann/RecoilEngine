@@ -84,6 +84,15 @@ int main(int argc, char* argv[])
 {
 	nowide::args a(argc, argv); // Fix arguments - make them UTF-8
 
+#ifdef __APPLE__
+	// a bundled fontconfig would look for its config in the prefix it was built for
+	if (getenv("FONTCONFIG_FILE") == nullptr) {
+		const std::string fontsConf = FileSystem::EnsurePathSepAtEnd(Platform::GetProcessExecutablePath()) + "fonts.conf";
+		if (FileSystem::FileExists(fontsConf))
+			setenv("FONTCONFIG_FILE", fontsConf.c_str(), 0);
+	}
+#endif
+
 // PROFILE builds exit on execv, HEADLESS does not use the GPU
 #if !defined(PROFILE) && !defined(HEADLESS)
 #define MAX_ARGS 32
