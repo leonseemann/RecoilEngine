@@ -330,6 +330,7 @@ public:
 	bool supportSeamlessCubeMaps;
 	bool supportFragDepthLayout;
 	bool supportPolygonModeLine;
+	bool supportGeometryShaders;
 
 	/**
 	 * Shader capabilities
