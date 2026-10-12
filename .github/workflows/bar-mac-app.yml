@@ -48,10 +48,10 @@ jobs:
             -DVERSION_OVERRIDE="$ENGINE_VERSION" \
             -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
             -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
-            -DAI_TYPES=NONE \
+            -DAI_TYPES=NATIVE \
             -DBUILD_spring-dedicated=OFF \
             -DBUILD_spring-headless=OFF
-          cmake --build build --target spring unitsync pr-downloader_cli basecontent
+          cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
 
       - name: Import signing certificate
         if: env.HAS_CERT == 'true'
