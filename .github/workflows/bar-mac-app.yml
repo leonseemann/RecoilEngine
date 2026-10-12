@@ -12,6 +12,7 @@
 name: BAR macOS app
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - 'macos-port-*'
@@ -24,7 +25,7 @@ permissions:
 jobs:
   build:
     if: github.repository != 'beyond-all-reason/RecoilEngine'
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       ENGINE_VERSION: '2026.07.04'
       HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_P12 != 'CHANGE_ME' }}
@@ -38,17 +39,22 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install cmake ninja pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          brew install cmake ninja meson bison pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
 
       - name: Build engine
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DVERSION_OVERRIDE="$ENGINE_VERSION" \
+            -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
+            -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
             -DAI_TYPES=NATIVE \
             -DBUILD_spring-dedicated=OFF \
             -DBUILD_spring-headless=OFF
           cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
+
+      - name: Build Mesa (EGL + patched Zink)
+        run: installer/Mac/make-mesa.sh "$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa-prefix"
 
       - name: Import signing certificate
         if: env.HAS_CERT == 'true'
@@ -70,7 +76,11 @@ jobs:
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Bundle app
-        run: MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
+            export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
+          fi
+          ZINK_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
 
       - name: Notarize
         if: env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
