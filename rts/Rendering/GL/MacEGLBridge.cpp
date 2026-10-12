@@ -74,8 +74,10 @@ namespace {
 	int texSizeX = 0;
 	int texSizeY = 0;
 
-	GLuint pbos[2] = {0, 0};
-	int pboSizes[2][2] = {{0, 0}, {0, 0}};
+	constexpr unsigned int NUM_PBOS = 3;
+	GLuint pbos[NUM_PBOS] = {};
+	GLsync fences[NUM_PBOS] = {};
+	int pboSizes[NUM_PBOS][2] = {};
 	unsigned int frameIdx = 0;
 	int vsyncInterval = 0;
 
@@ -282,9 +284,14 @@ void MacEGLBridge::DestroyContext()
 	texSizeX = texSizeY = 0;
 
 	egl.MakeCurrent(display, surface, surface, context);
+	for (unsigned int i = 0; i < NUM_PBOS; i++) {
+		if (fences[i] != nullptr)
+			glDeleteSync(fences[i]);
+		fences[i] = nullptr;
+	}
 	if (pbos[0] != 0)
-		glDeleteBuffers(2, pbos);
-	pbos[0] = pbos[1] = 0;
+		glDeleteBuffers(NUM_PBOS, pbos);
+	std::fill(std::begin(pbos), std::end(pbos), 0);
 
 	egl.MakeCurrent(display, nullptr, nullptr, nullptr);
 	egl.DestroySurface(display, surface);
@@ -329,11 +336,12 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 	glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 
 	if (pbos[0] == 0)
-		glGenBuffers(2, pbos);
+		glGenBuffers(NUM_PBOS, pbos);
 
-	// asynchronous readback: queue this frame into one PBO, present the previous one
-	const unsigned int cur = frameIdx & 1;
-	const unsigned int prv = cur ^ 1;
+	// asynchronous readback: queue this frame into one PBO and present the oldest one; the flush
+	// submits the frame right away so mapping never has to wait for the frame currently in flight
+	const unsigned int cur = frameIdx % NUM_PBOS;
+	const unsigned int prv = (frameIdx + 1) % NUM_PBOS;
 
 	glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[cur]);
 	if (pboSizes[cur][0] != surfSizeX || pboSizes[cur][1] != surfSizeY) {
@@ -341,12 +349,21 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 		pboSizes[cur][0] = surfSizeX;
 		pboSizes[cur][1] = surfSizeY;
 	}
-	glReadPixels(0, 0, surfSizeX, surfSizeY, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+	glReadPixels(0, 0, surfSizeX, surfSizeY, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+	if (fences[cur] != nullptr)
+		glDeleteSync(fences[cur]);
+	fences[cur] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+	glFlush();
 
 	const int px = pboSizes[prv][0];
 	const int py = pboSizes[prv][1];
 
-	if (frameIdx > 0 && px > 0 && py > 0) {
+	if (fences[prv] != nullptr && px > 0 && py > 0) {
+		glClientWaitSync(fences[prv], 0, GL_TIMEOUT_IGNORED);
+		glDeleteSync(fences[prv]);
+		fences[prv] = nullptr;
+
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[prv]);
 		const void* data = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, px * py * 4, GL_MAP_READ_BIT);
 
@@ -354,12 +371,22 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 			if (texture == nullptr || texSizeX != px || texSizeY != py) {
 				if (texture != nullptr)
 					SDL_DestroyTexture(texture);
-				texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, px, py);
+				texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, px, py);
 				texSizeX = px;
 				texSizeY = py;
 			}
-			if (texture != nullptr)
-				SDL_UpdateTexture(texture, nullptr, data, px * 4);
+
+			void* pixels = nullptr;
+			int pitch = 0;
+			if (texture != nullptr && SDL_LockTexture(texture, nullptr, &pixels, &pitch) == 0) {
+				if (pitch == px * 4) {
+					memcpy(pixels, data, px * py * 4);
+				} else {
+					for (int y = 0; y < py; ++y)
+						memcpy(static_cast<uint8_t*>(pixels) + y * pitch, static_cast<const uint8_t*>(data) + y * px * 4, px * 4);
+				}
+				SDL_UnlockTexture(texture);
+			}
 
 			// debug: RECOIL_MAC_EGL_DUMP=<file.ppm>[,frame] dumps one presented frame
 			static const char* dumpEnv = getenv("RECOIL_MAC_EGL_DUMP");
@@ -372,11 +399,11 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 				const std::string fn(dumpEnv, strchr(dumpEnv, ',') ? strchr(dumpEnv, ',') - dumpEnv : strlen(dumpEnv));
 				if (FILE* f = fopen(fn.c_str(), "wb"); f != nullptr) {
 					fprintf(f, "P6\n%d %d\n255\n", px, py);
-					const uint8_t* bgra = static_cast<const uint8_t*>(data);
+					const uint8_t* rgba = static_cast<const uint8_t*>(data);
 					for (int y = py - 1; y >= 0; --y) {
 						for (int x = 0; x < px; ++x) {
-							const uint8_t* p = bgra + (y * px + x) * 4;
-							const uint8_t rgb[3] = {p[2], p[1], p[0]};
+							const uint8_t* p = rgba + (y * px + x) * 4;
+							const uint8_t rgb[3] = {p[0], p[1], p[2]};
 							fwrite(rgb, 1, 3, f);
 						}
 					}
