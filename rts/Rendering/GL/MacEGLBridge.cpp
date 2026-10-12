@@ -74,7 +74,7 @@ namespace {
 	int texSizeX = 0;
 	int texSizeY = 0;
 
-	constexpr unsigned int NUM_PBOS = 3;
+	constexpr unsigned int NUM_PBOS = 2;
 	GLuint pbos[NUM_PBOS] = {};
 	GLsync fences[NUM_PBOS] = {};
 	int pboSizes[NUM_PBOS][2] = {};
