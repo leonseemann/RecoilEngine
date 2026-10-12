@@ -5,7 +5,8 @@
 # Usage: make-bar-app.sh <build dir> <output dir>
 # Env:
 #   SIGN_IDENTITY  codesign identity, "-" (default) for ad-hoc
-#   MESA_PREFIX    default: $(brew --prefix mesa)
+#   MESA_PREFIX    default: $(brew --prefix mesa), provides KosmicKrisp
+#   ZINK_PREFIX    default: MESA_PREFIX, provides EGL and Zink (see make-mesa.sh)
 #   VULKAN_PREFIX  default: $(brew --prefix vulkan-loader)
 #   BUNDLE_ID      default: io.github.recoil.bar-mac
 #   APP_RELEASE    "<owner/repo> <release tag>", enables the update check on start
@@ -17,6 +18,7 @@ OUT_DIR="$2"
 SRC_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 MESA_PREFIX="${MESA_PREFIX:-$(brew --prefix mesa)}"
+ZINK_PREFIX="${ZINK_PREFIX:-$MESA_PREFIX}"
 VULKAN_PREFIX="${VULKAN_PREFIX:-$(brew --prefix vulkan-loader)}"
 SDL3_PREFIX="${SDL3_PREFIX:-$(brew --prefix sdl3)}"
 BUNDLE_ID="${BUNDLE_ID:-io.github.recoil.bar-mac}"
@@ -62,9 +64,9 @@ EOF
 # copy all non-system dylib dependencies and make every reference bundle relative;
 # sdl2-compat dlopen()s SDL3 from next to itself
 python3 "$SRC_DIR/installer/Mac/bundle-dylibs.py" "$ENGINE" "$APP/Contents/Resources/licenses" \
-	"mesa=$MESA_PREFIX/lib/libEGL.1.dylib" \
+	"mesa=$ZINK_PREFIX/lib/libEGL.1.dylib" \
 	"mesa=$MESA_PREFIX/lib/libvulkan_kosmickrisp.dylib" \
-	"mesa=$(ls "$MESA_PREFIX"/lib/libgallium-*.dylib)" \
+	"mesa=$(ls "$ZINK_PREFIX"/lib/libgallium-*.dylib)" \
 	"mesa=$VULKAN_PREFIX/lib/libvulkan.1.dylib" \
 	"lib=$SDL3_PREFIX/lib/libSDL3.0.dylib:libSDL3.dylib"
 
