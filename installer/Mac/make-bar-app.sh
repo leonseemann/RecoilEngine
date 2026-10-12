@@ -8,6 +8,7 @@
 #   MESA_PREFIX    default: $(brew --prefix mesa)
 #   VULKAN_PREFIX  default: $(brew --prefix vulkan-loader)
 #   BUNDLE_ID      default: io.github.recoil.bar-mac
+#   APP_RELEASE    "<owner/repo> <release tag>", enables the update check on start
 #   MAKE_DMG=1     also create <output dir>/BAR-<version>.dmg
 set -euo pipefail
 
@@ -32,6 +33,7 @@ sed -e "s/###VERSION###/$VERSION/g" -e "s/###BUNDLE_ID###/$BUNDLE_ID/g" -e "s/##
 	"$SRC_DIR/installer/Mac/bar/Info.plist" > "$APP/Contents/Info.plist"
 install -m 755 "$SRC_DIR/installer/Mac/bar/launch.sh" "$APP/Contents/MacOS/BAR"
 cp "$SRC_DIR/installer/Mac/spring.icns" "$APP/Contents/Resources/"
+[ -z "${APP_RELEASE:-}" ] || echo "$APP_RELEASE" > "$APP/Contents/Resources/app-release"
 
 # engine
 cp "$BUILD_DIR/spring" "$BUILD_DIR/libunitsync.dylib" "$BUILD_DIR/tools/pr-downloader/src/pr-downloader" "$ENGINE/"
