@@ -1,0 +1,96 @@
+# Builds BAR.app (engine + Mesa/Zink/KosmicKrisp, no game content) for Apple
+# Silicon, signs and notarizes it when the Developer ID secrets are set and
+# publishes the DMG as a GitHub release for tags matching bar-mac-v*.
+#
+# Secrets (all optional, without them the app is ad-hoc signed):
+#   MACOS_CERT_P12         base64 of the exported "Developer ID Application" .p12
+#   MACOS_CERT_PASSWORD    password of that .p12
+#   APPLE_ID               Apple ID used for notarization
+#   APPLE_TEAM_ID          team id of the Developer ID certificate
+#   APPLE_APP_PASSWORD     app-specific password of that Apple ID
+
+name: BAR macOS app
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'bar-mac-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.repository != 'beyond-all-reason/RecoilEngine'
+    runs-on: macos-15
+    env:
+      ENGINE_VERSION: '2026.07.04'
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
+      HAS_NOTARY: ${{ secrets.APPLE_APP_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install cmake ninja pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+
+      - name: Build engine
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVERSION_OVERRIDE="$ENGINE_VERSION" \
+            -DAI_TYPES=NONE \
+            -DBUILD_spring-dedicated=OFF \
+            -DBUILD_spring-headless=OFF
+          cmake --build build --target spring unitsync pr-downloader_cli basecontent
+
+      - name: Import signing certificate
+        if: env.HAS_CERT == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -o '"Developer ID Application:[^"]*"' | head -n1 | tr -d '"')"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Bundle app
+        run: MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+
+      - name: Notarize
+        if: env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit dist/BAR-*.dmg --wait \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+          xcrun stapler staple dist/BAR-*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BAR-macos
+          path: dist/BAR-*.dmg
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/bar-mac-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/BAR-*.dmg \
+            --title "BAR for macOS ($GITHUB_REF_NAME)" \
+            --notes "Beyond All Reason for Apple Silicon Macs (engine $ENGINE_VERSION). Open the DMG, drag BAR into Applications and start it; the game is downloaded from the official BAR servers on first start."
