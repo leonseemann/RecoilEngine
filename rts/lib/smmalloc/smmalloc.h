@@ -25,6 +25,8 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <cstdlib>
+#include <type_traits>
 #include <initializer_list>
 #include <memory>
 #include <stdint.h>
