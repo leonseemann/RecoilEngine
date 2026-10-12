@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install cmake ninja pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          brew install cmake ninja meson bison pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
 
       - name: Build engine
         run: |
@@ -52,6 +52,9 @@ jobs:
             -DBUILD_spring-dedicated=OFF \
             -DBUILD_spring-headless=OFF
           cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
+
+      - name: Build Mesa (EGL + patched Zink)
+        run: installer/Mac/make-mesa.sh "$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa-prefix"
 
       - name: Import signing certificate
         if: env.HAS_CERT == 'true'
@@ -77,7 +80,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
             export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
           fi
-          MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+          ZINK_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
 
       - name: Notarize
         if: env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
