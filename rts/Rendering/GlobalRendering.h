@@ -329,6 +329,7 @@ public:
 	bool supportClipSpaceControl;
 	bool supportSeamlessCubeMaps;
 	bool supportFragDepthLayout;
+	bool supportPolygonModeLine;
 
 	/**
 	 * Shader capabilities
