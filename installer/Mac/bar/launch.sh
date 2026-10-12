@@ -27,6 +27,23 @@ fail() {
 	exit 1
 }
 
+# release this app was built from, "<owner/repo> <tag>"; missing for local builds
+check_app_update() {
+	local release="$ENGINE_DIR/../app-release"
+	[ -f "$release" ] || return 0
+	local repo tag json latest url
+	read -r repo tag < "$release"
+
+	json="$(curl -fsS --max-time 5 "https://api.github.com/repos/$repo/releases/latest")" || return 0
+	latest="$(plutil -extract tag_name raw -o - - <<< "$json")" || return 0
+	url="$(plutil -extract html_url raw -o - - <<< "$json")" || return 0
+	[ "$latest" != "$tag" ] || return 0
+
+	if osascript -e "button returned of (display dialog \"Eine neue Version von BAR für Mac ist verfügbar ($latest, installiert: $tag).\n\nDie neue Version aus dem Download in den Programme-Ordner ziehen und die alte ersetzen.\" with title \"Beyond All Reason\" buttons {\"Später\", \"Herunterladen\"} default button \"Herunterladen\")" | grep -q Herunterladen; then
+		open "$url"
+	fi
+}
+
 update() {
 	local prd="$ENGINE_DIR/pr-downloader"
 
@@ -55,6 +72,7 @@ configure() {
 EOF
 }
 
+check_app_update
 if ! update; then
 	# play offline with what is already there
 	[ -d "$BAR_DATA/packages" ] || fail "Download der Spieldaten fehlgeschlagen. Besteht eine Internetverbindung?"
