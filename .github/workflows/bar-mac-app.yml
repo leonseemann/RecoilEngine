@@ -13,6 +13,8 @@ name: BAR macOS app
 on:
   workflow_dispatch:
   push:
+    branches:
+      - 'macos-port-*'
     tags:
       - 'bar-mac-v*'
 
