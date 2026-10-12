@@ -60,7 +60,7 @@ if (APPLE)
 	list(APPEND engineLibraries ${COREFOUNDATION_LIBRARY})
 	if (MAC_EGL_ZINK)
 		# Zink dlopen()s @rpath/libvulkan.1.dylib; Mesa libs are dlopen()ed at runtime
-		list(APPEND engineLibraries "-Wl,-rpath,${MAC_VULKAN_LIBDIR}" "-Wl,-rpath,${MAC_MESA_PREFIX}/lib")
+		list(APPEND engineLibraries "-Wl,-rpath,@executable_path/mesa/lib" "-Wl,-rpath,${MAC_VULKAN_LIBDIR}" "-Wl,-rpath,${MAC_MESA_PREFIX}/lib")
 	endif ()
 endif (APPLE)
 

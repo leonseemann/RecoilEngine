@@ -5,6 +5,9 @@
 #ifdef MAC_EGL_BRIDGE_AVAILABLE
 
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <climits>
+#include <unistd.h>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -88,11 +91,30 @@ namespace {
 			setenv(k, v, 0);
 	}
 
+	// a Mesa tree shipped next to the engine binary takes precedence over the system one
+	const std::string& MesaPrefix() {
+		static const std::string prefix = []() -> std::string {
+			char exe[PATH_MAX];
+			char real[PATH_MAX];
+			uint32_t size = sizeof(exe);
+
+			if (_NSGetExecutablePath(exe, &size) == 0 && realpath(exe, real) != nullptr) {
+				std::string dir = real;
+				dir = dir.substr(0, dir.rfind('/')) + "/mesa";
+
+				if (access((dir + "/lib/libEGL.1.dylib").c_str(), R_OK) == 0)
+					return dir;
+			}
+			return MAC_MESA_PREFIX;
+		}();
+		return prefix;
+	}
+
 	bool LoadEGL() {
 		if (egl.lib != nullptr)
 			return true;
 
-		const std::string paths[] = {std::string(MAC_MESA_PREFIX) + "/lib/libEGL.1.dylib", "libEGL.1.dylib", "libEGL.dylib"};
+		const std::string paths[] = {MesaPrefix() + "/lib/libEGL.1.dylib", "libEGL.1.dylib", "libEGL.dylib"};
 		for (const auto& p: paths) {
 			if ((egl.lib = dlopen(p.c_str(), RTLD_NOW | RTLD_LOCAL)) != nullptr)
 				break;
@@ -126,7 +148,7 @@ namespace {
 		SetEnvDefault("GALLIUM_DRIVER", "zink");
 
 		if (getenv("VK_ICD_FILENAMES") == nullptr && getenv("VK_DRIVER_FILES") == nullptr) {
-			const std::string icd = std::string(MAC_MESA_PREFIX) + "/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json";
+			const std::string icd = MesaPrefix() + "/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json";
 			setenv("VK_DRIVER_FILES", icd.c_str(), 0);
 		}
 
