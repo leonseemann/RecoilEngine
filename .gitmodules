@@ -51,4 +51,4 @@
 	url = https://github.com/DLTcollab/sse2neon.git
 [submodule "rts/lib/streflop"]
 	path = rts/lib/streflop
-	url = https://github.com/RecoilEngine/streflop.git
+	url = https://github.com/leonseemann/streflop.git
