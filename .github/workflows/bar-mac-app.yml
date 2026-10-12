@@ -70,7 +70,11 @@ jobs:
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Bundle app
-        run: MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
+            export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
+          fi
+          MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
 
       - name: Notarize
         if: env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
