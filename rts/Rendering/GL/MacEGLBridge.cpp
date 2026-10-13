@@ -206,10 +206,8 @@ namespace {
 // Wide lines are approximated by repeating the draw with the viewport shifted by whole pixels.
 namespace WideLines {
 	thread_local float lineWidth = 1.0f;
-	thread_local GLint viewport[4] = {};
 
 	PFNGLLINEWIDTHPROC realLineWidth = nullptr;
-	PFNGLVIEWPORTPROC realViewport = nullptr;
 	PFNGLDRAWARRAYSPROC realDrawArrays = nullptr;
 	PFNGLDRAWELEMENTSPROC realDrawElements = nullptr;
 	PFNGLDRAWRANGEELEMENTSPROC realDrawRangeElements = nullptr;
@@ -238,27 +236,27 @@ namespace WideLines {
 	void Draw(GLenum mode, F&& draw) {
 		draw();
 
-		if (lineWidth < 1.5f || viewport[2] <= 0 || !IsLineMode(mode))
+		if (lineWidth < 1.5f || !IsLineMode(mode))
 			return;
+
+		// queried instead of tracked, glPopAttrib restores it behind our back
+		GLint viewport[4] = {};
+		glGetIntegerv(GL_VIEWPORT, viewport);
 
 		const int radius = static_cast<int>((lineWidth - 1.0f) * 0.5f + 0.5f);
 		for (int i = 1; i <= radius; ++i) {
 			const int offsets[4][2] = {{i, 0}, {-i, 0}, {0, i}, {0, -i}};
 			for (const auto& o: offsets) {
-				realViewport(viewport[0] + o[0], viewport[1] + o[1], viewport[2], viewport[3]);
+				glViewport(viewport[0] + o[0], viewport[1] + o[1], viewport[2], viewport[3]);
 				draw();
 			}
 		}
-		realViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+		glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 	}
 
 	void APIENTRY LineWidth(GLfloat width) {
 		lineWidth = width;
 		realLineWidth(width);
-	}
-	void APIENTRY Viewport(GLint x, GLint y, GLsizei w, GLsizei h) {
-		viewport[0] = x; viewport[1] = y; viewport[2] = w; viewport[3] = h;
-		realViewport(x, y, w, h);
 	}
 	void APIENTRY DrawArrays(GLenum mode, GLint first, GLsizei count) {
 		Draw(mode, [&]() { realDrawArrays(mode, first, count); });
@@ -303,7 +301,6 @@ namespace WideLines {
 	void* GetProcAddress(const char* name, void* real) {
 		#define WRAP(fn) if (strcmp(name, "gl" #fn) == 0) return Wrap(real, real##fn, &fn)
 		WRAP(LineWidth);
-		WRAP(Viewport);
 		WRAP(DrawArrays);
 		WRAP(DrawElements);
 		WRAP(DrawRangeElements);
