@@ -34,6 +34,7 @@ mkdir -p "$APP/Contents/MacOS" "$ENGINE/lib" "$ENGINE/mesa/lib" "$ENGINE/mesa/sh
 sed -e "s/###VERSION###/$VERSION/g" -e "s/###BUNDLE_ID###/$BUNDLE_ID/g" -e "s/###MIN_OS###/$MIN_OS/g" \
 	"$SRC_DIR/installer/Mac/bar/Info.plist" > "$APP/Contents/Info.plist"
 install -m 755 "$SRC_DIR/installer/Mac/bar/launch.sh" "$APP/Contents/MacOS/BAR"
+xcrun swiftc -O -target "arm64-apple-macos$MIN_OS" "$SRC_DIR/installer/Mac/bar/download-progress.swift" -o "$APP/Contents/MacOS/download-progress"
 cp "$SRC_DIR/installer/Mac/spring.icns" "$APP/Contents/Resources/"
 [ -z "${APP_RELEASE:-}" ] || echo "$APP_RELEASE" > "$APP/Contents/Resources/app-release"
 
@@ -79,7 +80,7 @@ cp "$SRC_DIR/installer/Mac/bar/README-licenses.txt" "$APP/Contents/Resources/lic
 SIGN_ARGS=(--force --timestamp --options runtime -s "$SIGN_IDENTITY")
 [ "$SIGN_IDENTITY" = "-" ] && SIGN_ARGS=(--force -s -)
 find "$ENGINE" -name '*.dylib' -print0 | xargs -0 codesign "${SIGN_ARGS[@]}"
-codesign "${SIGN_ARGS[@]}" "$ENGINE/pr-downloader"
+codesign "${SIGN_ARGS[@]}" "$ENGINE/pr-downloader" "$APP/Contents/MacOS/download-progress"
 codesign "${SIGN_ARGS[@]}" --entitlements "$SRC_DIR/installer/Mac/bar/entitlements.plist" "$ENGINE/spring"
 codesign "${SIGN_ARGS[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
