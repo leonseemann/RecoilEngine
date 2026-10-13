@@ -1894,6 +1894,9 @@ void main()
 		VAO vao;
 		vao.Bind();
 
+		// the viewport, enables and clear colour go back the way they were found
+		glPushAttrib(GL_ALL_ATTRIB_BITS);
+
 		glViewport(0, 0, probeSize, probeSize);
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_BLEND);
@@ -1910,6 +1913,7 @@ void main()
 		std::array<uint8_t, probeSize * probeSize * 4> pixels;
 		glReadPixels(0, 0, probeSize, probeSize, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
+		glPopAttrib();
 		vao.Unbind();
 
 		size_t litPixels = 0;
