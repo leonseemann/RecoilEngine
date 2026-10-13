@@ -18,10 +18,6 @@ export PRD_HTTP_SEARCH_URL=https://files-cdn.beyondallreason.dev/find
 mkdir -p "$BAR_DATA" "$(dirname "$LOG")"
 exec >"$LOG" 2>&1
 
-notify() {
-	osascript -e "display notification \"$1\" with title \"Beyond All Reason\"" || true
-}
-
 fail() {
 	osascript -e "display alert \"Beyond All Reason\" message \"$1\n\nLog: $LOG\" as critical" || true
 	exit 1
@@ -47,9 +43,6 @@ check_app_update() {
 update() {
 	local prd="$ENGINE_DIR/pr-downloader"
 
-	if [ ! -d "$BAR_DATA/packages" ]; then
-		notify "Lade Spieldaten herunter, das kann einige Minuten dauern..."
-	fi
 	"$prd" --filesystem-writepath "$BAR_DATA" --download-game "$GAME_TAG" || return 1
 	"$prd" --filesystem-writepath "$BAR_DATA" --download-game "$LOBBY_TAG" || return 1
 }
@@ -73,7 +66,8 @@ EOF
 }
 
 check_app_update
-if ! update; then
+update 2>&1 | "$(dirname "$0")/download-progress"
+if [ "${PIPESTATUS[0]}" != 0 ]; then
 	# play offline with what is already there
 	[ -d "$BAR_DATA/packages" ] || fail "Download der Spieldaten fehlgeschlagen. Besteht eine Internetverbindung?"
 fi
