@@ -39,7 +39,13 @@ def rpaths(path):
 	return re.findall(r"cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (.+?) \(offset", out)
 
 
+# bundled copy -> file it was copied from, whose neighbours its @rpath and
+# @loader_path references point at
+origin = {}
+
+
 def resolve(name, referrer):
+	referrer = origin.get(referrer, referrer)
 	if name.startswith("@rpath/"):
 		base = name[len("@rpath/"):]
 		for d in (os.path.dirname(referrer), lib_dir, mesa_dir, "/opt/homebrew/lib", "/usr/local/lib"):
@@ -76,6 +82,7 @@ for arg in sys.argv[3:]:
 	shutil.copy(os.path.realpath(src), dst)
 	copy_license(src)
 	bundled[os.path.basename(dst)] = dst
+	origin[dst] = os.path.realpath(src)
 
 queue = [os.path.join(engine, f) for f in ("spring", "pr-downloader", "libunitsync.dylib")] + list(bundled.values())
 done = set()
@@ -95,6 +102,7 @@ while queue:
 			shutil.copy(os.path.realpath(src), dst)
 			copy_license(src)
 			bundled[base] = dst
+			origin[dst] = os.path.realpath(src)
 		queue.append(bundled[base])
 		if name != f"@rpath/{base}":
 			run("install_name_tool", "-change", name, f"@rpath/{base}", path)
