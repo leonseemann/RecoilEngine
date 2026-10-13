@@ -5,6 +5,9 @@
 #ifdef MAC_EGL_BRIDGE_AVAILABLE
 
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <climits>
+#include <unistd.h>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -74,8 +77,10 @@ namespace {
 	int texSizeX = 0;
 	int texSizeY = 0;
 
-	GLuint pbos[2] = {0, 0};
-	int pboSizes[2][2] = {{0, 0}, {0, 0}};
+	constexpr unsigned int NUM_PBOS = 2;
+	GLuint pbos[NUM_PBOS] = {};
+	GLsync fences[NUM_PBOS] = {};
+	int pboSizes[NUM_PBOS][2] = {};
 	unsigned int frameIdx = 0;
 	int vsyncInterval = 0;
 
@@ -86,11 +91,30 @@ namespace {
 			setenv(k, v, 0);
 	}
 
+	// a Mesa tree shipped next to the engine binary takes precedence over the system one
+	const std::string& MesaPrefix() {
+		static const std::string prefix = []() -> std::string {
+			char exe[PATH_MAX];
+			char real[PATH_MAX];
+			uint32_t size = sizeof(exe);
+
+			if (_NSGetExecutablePath(exe, &size) == 0 && realpath(exe, real) != nullptr) {
+				std::string dir = real;
+				dir = dir.substr(0, dir.rfind('/')) + "/mesa";
+
+				if (access((dir + "/lib/libEGL.1.dylib").c_str(), R_OK) == 0)
+					return dir;
+			}
+			return MAC_MESA_PREFIX;
+		}();
+		return prefix;
+	}
+
 	bool LoadEGL() {
 		if (egl.lib != nullptr)
 			return true;
 
-		const std::string paths[] = {std::string(MAC_MESA_PREFIX) + "/lib/libEGL.1.dylib", "libEGL.1.dylib", "libEGL.dylib"};
+		const std::string paths[] = {MesaPrefix() + "/lib/libEGL.1.dylib", "libEGL.1.dylib", "libEGL.dylib"};
 		for (const auto& p: paths) {
 			if ((egl.lib = dlopen(p.c_str(), RTLD_NOW | RTLD_LOCAL)) != nullptr)
 				break;
@@ -124,7 +148,7 @@ namespace {
 		SetEnvDefault("GALLIUM_DRIVER", "zink");
 
 		if (getenv("VK_ICD_FILENAMES") == nullptr && getenv("VK_DRIVER_FILES") == nullptr) {
-			const std::string icd = std::string(MAC_MESA_PREFIX) + "/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json";
+			const std::string icd = MesaPrefix() + "/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json";
 			setenv("VK_DRIVER_FILES", icd.c_str(), 0);
 		}
 
@@ -174,6 +198,124 @@ namespace {
 			LOG("[MacEGLBridge] presenting through SDL renderer \"%s\"", info.name);
 
 		return true;
+	}
+}
+
+
+// KosmicKrisp has neither wideLines nor geometry shaders, so Zink clamps every line to one pixel.
+// Wide lines are approximated by repeating the draw with the viewport shifted by whole pixels.
+namespace WideLines {
+	thread_local float lineWidth = 1.0f;
+	thread_local GLint viewport[4] = {};
+
+	PFNGLLINEWIDTHPROC realLineWidth = nullptr;
+	PFNGLVIEWPORTPROC realViewport = nullptr;
+	PFNGLDRAWARRAYSPROC realDrawArrays = nullptr;
+	PFNGLDRAWELEMENTSPROC realDrawElements = nullptr;
+	PFNGLDRAWRANGEELEMENTSPROC realDrawRangeElements = nullptr;
+	PFNGLDRAWARRAYSINSTANCEDPROC realDrawArraysInstanced = nullptr;
+	PFNGLDRAWELEMENTSINSTANCEDPROC realDrawElementsInstanced = nullptr;
+	PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC realDrawArraysInstancedBaseInstance = nullptr;
+	PFNGLDRAWELEMENTSINSTANCEDBASEINSTANCEPROC realDrawElementsInstancedBaseInstance = nullptr;
+	PFNGLDRAWELEMENTSBASEVERTEXPROC realDrawElementsBaseVertex = nullptr;
+	PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXPROC realDrawElementsInstancedBaseVertex = nullptr;
+	PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC realDrawElementsInstancedBaseVertexBaseInstance = nullptr;
+
+	bool IsLineMode(GLenum mode) {
+		switch (mode) {
+			case GL_LINES:
+			case GL_LINE_STRIP:
+			case GL_LINE_LOOP:
+			case GL_LINES_ADJACENCY:
+			case GL_LINE_STRIP_ADJACENCY:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	template<typename F>
+	void Draw(GLenum mode, F&& draw) {
+		draw();
+
+		if (lineWidth < 1.5f || viewport[2] <= 0 || !IsLineMode(mode))
+			return;
+
+		const int radius = static_cast<int>((lineWidth - 1.0f) * 0.5f + 0.5f);
+		for (int i = 1; i <= radius; ++i) {
+			const int offsets[4][2] = {{i, 0}, {-i, 0}, {0, i}, {0, -i}};
+			for (const auto& o: offsets) {
+				realViewport(viewport[0] + o[0], viewport[1] + o[1], viewport[2], viewport[3]);
+				draw();
+			}
+		}
+		realViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+	}
+
+	void APIENTRY LineWidth(GLfloat width) {
+		lineWidth = width;
+		realLineWidth(width);
+	}
+	void APIENTRY Viewport(GLint x, GLint y, GLsizei w, GLsizei h) {
+		viewport[0] = x; viewport[1] = y; viewport[2] = w; viewport[3] = h;
+		realViewport(x, y, w, h);
+	}
+	void APIENTRY DrawArrays(GLenum mode, GLint first, GLsizei count) {
+		Draw(mode, [&]() { realDrawArrays(mode, first, count); });
+	}
+	void APIENTRY DrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices) {
+		Draw(mode, [&]() { realDrawElements(mode, count, type, indices); });
+	}
+	void APIENTRY DrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void* indices) {
+		Draw(mode, [&]() { realDrawRangeElements(mode, start, end, count, type, indices); });
+	}
+	void APIENTRY DrawArraysInstanced(GLenum mode, GLint first, GLsizei count, GLsizei instances) {
+		Draw(mode, [&]() { realDrawArraysInstanced(mode, first, count, instances); });
+	}
+	void APIENTRY DrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instances) {
+		Draw(mode, [&]() { realDrawElementsInstanced(mode, count, type, indices, instances); });
+	}
+	void APIENTRY DrawArraysInstancedBaseInstance(GLenum mode, GLint first, GLsizei count, GLsizei instances, GLuint baseInstance) {
+		Draw(mode, [&]() { realDrawArraysInstancedBaseInstance(mode, first, count, instances, baseInstance); });
+	}
+	void APIENTRY DrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instances, GLuint baseInstance) {
+		Draw(mode, [&]() { realDrawElementsInstancedBaseInstance(mode, count, type, indices, instances, baseInstance); });
+	}
+	void APIENTRY DrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type, const void* indices, GLint baseVertex) {
+		Draw(mode, [&]() { realDrawElementsBaseVertex(mode, count, type, indices, baseVertex); });
+	}
+	void APIENTRY DrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instances, GLint baseVertex) {
+		Draw(mode, [&]() { realDrawElementsInstancedBaseVertex(mode, count, type, indices, instances, baseVertex); });
+	}
+	void APIENTRY DrawElementsInstancedBaseVertexBaseInstance(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instances, GLint baseVertex, GLuint baseInstance) {
+		Draw(mode, [&]() { realDrawElementsInstancedBaseVertexBaseInstance(mode, count, type, indices, instances, baseVertex, baseInstance); });
+	}
+
+	template<typename T>
+	void* Wrap(void* real, T& realPtr, T wrapper) {
+		if (real == nullptr)
+			return nullptr;
+
+		realPtr = reinterpret_cast<T>(real);
+		return reinterpret_cast<void*>(wrapper);
+	}
+
+	void* GetProcAddress(const char* name, void* real) {
+		#define WRAP(fn) if (strcmp(name, "gl" #fn) == 0) return Wrap(real, real##fn, &fn)
+		WRAP(LineWidth);
+		WRAP(Viewport);
+		WRAP(DrawArrays);
+		WRAP(DrawElements);
+		WRAP(DrawRangeElements);
+		WRAP(DrawArraysInstanced);
+		WRAP(DrawElementsInstanced);
+		WRAP(DrawArraysInstancedBaseInstance);
+		WRAP(DrawElementsInstancedBaseInstance);
+		WRAP(DrawElementsBaseVertex);
+		WRAP(DrawElementsInstancedBaseVertex);
+		WRAP(DrawElementsInstancedBaseVertexBaseInstance);
+		#undef WRAP
+		return real;
 	}
 }
 
@@ -282,9 +424,14 @@ void MacEGLBridge::DestroyContext()
 	texSizeX = texSizeY = 0;
 
 	egl.MakeCurrent(display, surface, surface, context);
+	for (unsigned int i = 0; i < NUM_PBOS; i++) {
+		if (fences[i] != nullptr)
+			glDeleteSync(fences[i]);
+		fences[i] = nullptr;
+	}
 	if (pbos[0] != 0)
-		glDeleteBuffers(2, pbos);
-	pbos[0] = pbos[1] = 0;
+		glDeleteBuffers(NUM_PBOS, pbos);
+	std::fill(std::begin(pbos), std::end(pbos), 0);
 
 	egl.MakeCurrent(display, nullptr, nullptr, nullptr);
 	egl.DestroySurface(display, surface);
@@ -301,7 +448,7 @@ void* MacEGLBridge::GetProcAddress(const char* name)
 	if (!LoadEGL())
 		return nullptr;
 
-	return egl.GetProcAddress(name);
+	return WideLines::GetProcAddress(name, egl.GetProcAddress(name));
 }
 
 void MacEGLBridge::SetSwapInterval(int interval)
@@ -329,11 +476,12 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 	glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 
 	if (pbos[0] == 0)
-		glGenBuffers(2, pbos);
+		glGenBuffers(NUM_PBOS, pbos);
 
-	// asynchronous readback: queue this frame into one PBO, present the previous one
-	const unsigned int cur = frameIdx & 1;
-	const unsigned int prv = cur ^ 1;
+	// asynchronous readback: queue this frame into one PBO and present the oldest one; the flush
+	// submits the frame right away so mapping never has to wait for the frame currently in flight
+	const unsigned int cur = frameIdx % NUM_PBOS;
+	const unsigned int prv = (frameIdx + 1) % NUM_PBOS;
 
 	glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[cur]);
 	if (pboSizes[cur][0] != surfSizeX || pboSizes[cur][1] != surfSizeY) {
@@ -341,12 +489,21 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 		pboSizes[cur][0] = surfSizeX;
 		pboSizes[cur][1] = surfSizeY;
 	}
-	glReadPixels(0, 0, surfSizeX, surfSizeY, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+	glReadPixels(0, 0, surfSizeX, surfSizeY, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+	if (fences[cur] != nullptr)
+		glDeleteSync(fences[cur]);
+	fences[cur] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+	glFlush();
 
 	const int px = pboSizes[prv][0];
 	const int py = pboSizes[prv][1];
 
-	if (frameIdx > 0 && px > 0 && py > 0) {
+	if (fences[prv] != nullptr && px > 0 && py > 0) {
+		glClientWaitSync(fences[prv], 0, GL_TIMEOUT_IGNORED);
+		glDeleteSync(fences[prv]);
+		fences[prv] = nullptr;
+
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[prv]);
 		const void* data = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, px * py * 4, GL_MAP_READ_BIT);
 
@@ -354,12 +511,22 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 			if (texture == nullptr || texSizeX != px || texSizeY != py) {
 				if (texture != nullptr)
 					SDL_DestroyTexture(texture);
-				texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, px, py);
+				texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, px, py);
 				texSizeX = px;
 				texSizeY = py;
 			}
-			if (texture != nullptr)
-				SDL_UpdateTexture(texture, nullptr, data, px * 4);
+
+			void* pixels = nullptr;
+			int pitch = 0;
+			if (texture != nullptr && SDL_LockTexture(texture, nullptr, &pixels, &pitch) == 0) {
+				if (pitch == px * 4) {
+					memcpy(pixels, data, px * py * 4);
+				} else {
+					for (int y = 0; y < py; ++y)
+						memcpy(static_cast<uint8_t*>(pixels) + y * pitch, static_cast<const uint8_t*>(data) + y * px * 4, px * 4);
+				}
+				SDL_UnlockTexture(texture);
+			}
 
 			// debug: RECOIL_MAC_EGL_DUMP=<file.ppm>[,frame] dumps one presented frame
 			static const char* dumpEnv = getenv("RECOIL_MAC_EGL_DUMP");
@@ -372,11 +539,11 @@ void MacEGLBridge::SwapWindow(SDL_Window* window)
 				const std::string fn(dumpEnv, strchr(dumpEnv, ',') ? strchr(dumpEnv, ',') - dumpEnv : strlen(dumpEnv));
 				if (FILE* f = fopen(fn.c_str(), "wb"); f != nullptr) {
 					fprintf(f, "P6\n%d %d\n255\n", px, py);
-					const uint8_t* bgra = static_cast<const uint8_t*>(data);
+					const uint8_t* rgba = static_cast<const uint8_t*>(data);
 					for (int y = py - 1; y >= 0; --y) {
 						for (int x = 0; x < px; ++x) {
-							const uint8_t* p = bgra + (y * px + x) * 4;
-							const uint8_t rgb[3] = {p[2], p[1], p[0]};
+							const uint8_t* p = rgba + (y * px + x) * 4;
+							const uint8_t rgb[3] = {p[0], p[1], p[2]};
 							fwrite(rgb, 1, 3, f);
 						}
 					}

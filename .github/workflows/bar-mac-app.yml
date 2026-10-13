@@ -1,0 +1,116 @@
+# Builds BAR.app (engine + Mesa/Zink/KosmicKrisp, no game content) for Apple
+# Silicon. Pull requests and pushes get an ad-hoc signed app; tags matching
+# bar-mac-v* are signed and notarized when the Developer ID secrets are set and
+# publish the DMG as a GitHub release.
+#
+# Secrets (all optional, without them or set to CHANGE_ME the app is ad-hoc signed):
+#   MACOS_CERT_P12         base64 of the exported "Developer ID Application" .p12
+#   MACOS_CERT_PASSWORD    password of that .p12
+#   APPLE_ID               Apple ID used for notarization
+#   APPLE_TEAM_ID          team id of the Developer ID certificate
+#   APPLE_APP_PASSWORD     app-specific password of that Apple ID
+
+name: BAR macOS app
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - 'macos-port-*'
+    tags:
+      - 'bar-mac-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.repository != 'beyond-all-reason/RecoilEngine'
+    runs-on: macos-26
+    env:
+      ENGINE_VERSION: '2026.07.04'
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/bar-mac-v') }}
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_P12 != 'CHANGE_ME' }}
+      HAS_NOTARY: ${{ secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_APP_PASSWORD != 'CHANGE_ME' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          brew update
+          # no jsoncpp: Homebrew builds it against libc++, so the engine uses its bundled copy
+          brew install cmake ninja meson bison pkg-config gcc sevenzip devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          brew uninstall --ignore-dependencies jsoncpp 2>/dev/null || true
+
+      - name: Build engine
+        run: |
+          # GCC like the Linux and Windows builds, for the same floating point behaviour
+          GCC_BIN="$(ls "$(brew --prefix gcc)"/bin/gcc-[0-9]* | sort -V | tail -n1)"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER="$GCC_BIN" \
+            -DCMAKE_CXX_COMPILER="${GCC_BIN/gcc-/g++-}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVERSION_OVERRIDE="$ENGINE_VERSION" \
+            -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
+            -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
+            -DAI_TYPES=NATIVE \
+            -DBUILD_spring-dedicated=OFF \
+            -DBUILD_spring-headless=OFF
+          cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
+
+      - name: Build Mesa (EGL + patched Zink)
+        run: installer/Mac/make-mesa.sh "$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa-prefix"
+
+      - name: Import signing certificate
+        if: env.IS_RELEASE == 'true' && env.HAS_CERT == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -o '"Developer ID Application:[^"]*"' | head -n1 | tr -d '"')"
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Bundle app
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
+            export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
+          fi
+          ZINK_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+
+      - name: Notarize
+        if: env.IS_RELEASE == 'true' && env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit dist/BAR-*.dmg --wait \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+          xcrun stapler staple dist/BAR-*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BAR-macos
+          path: dist/BAR-*.dmg
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/bar-mac-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/BAR-*.dmg \
+            --title "BAR for macOS ($GITHUB_REF_NAME)" \
+            --notes "Beyond All Reason for Apple Silicon Macs (engine $ENGINE_VERSION). Open the DMG, drag BAR into Applications and start it; the game is downloaded from the official BAR servers on first start."
