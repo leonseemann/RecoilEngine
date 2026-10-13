@@ -41,11 +41,17 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install cmake ninja meson bison pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          # no jsoncpp: Homebrew builds it against libc++, so the engine uses its bundled copy
+          brew install cmake ninja meson bison pkg-config gcc sevenzip devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          brew uninstall --ignore-dependencies jsoncpp 2>/dev/null || true
 
       - name: Build engine
         run: |
+          # GCC like the Linux and Windows builds, for the same floating point behaviour
+          GCC_BIN="$(ls "$(brew --prefix gcc)"/bin/gcc-[0-9]* | sort -V | tail -n1)"
           cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER="$GCC_BIN" \
+            -DCMAKE_CXX_COMPILER="${GCC_BIN/gcc-/g++-}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DVERSION_OVERRIDE="$ENGINE_VERSION" \
             -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
