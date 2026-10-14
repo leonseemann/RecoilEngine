@@ -36,7 +36,9 @@ check_app_update() {
 	[ "$latest" != "$tag" ] || return 0
 
 	if osascript -e "button returned of (display dialog \"Eine neue Version von BAR für Mac ist verfügbar ($latest, installiert: $tag).\n\nDie neue Version aus dem Download in den Programme-Ordner ziehen und die alte ersetzen.\" with title \"Beyond All Reason\" buttons {\"Später\", \"Herunterladen\"} default button \"Herunterladen\")" | grep -q Herunterladen; then
+		# quit so the running app does not stand in the way of replacing it
 		open "$url"
+		exit 0
 	fi
 }
 
