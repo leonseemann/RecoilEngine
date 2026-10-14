@@ -5,8 +5,8 @@
 # Usage: make-bar-app.sh <build dir> <output dir>
 # Env:
 #   SIGN_IDENTITY  codesign identity, "-" (default) for ad-hoc
-#   MESA_PREFIX    default: $(brew --prefix mesa), provides KosmicKrisp
-#   ZINK_PREFIX    default: MESA_PREFIX, provides EGL and Zink (see make-mesa.sh)
+#   MESA_PREFIX    default: $(brew --prefix mesa), provides KosmicKrisp (see make-mesa.sh)
+#   ZINK_PREFIX    default: MESA_PREFIX, provides EGL and Zink
 #   VULKAN_PREFIX  default: $(brew --prefix vulkan-loader)
 #   BUNDLE_ID      default: io.github.recoil.bar-mac
 #   APP_RELEASE    "<owner/repo> <release tag>", enables the update check on start
