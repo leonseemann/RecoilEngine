@@ -1,7 +1,9 @@
-# Builds BAR.app (engine + Mesa/Zink/KosmicKrisp, no game content) for Apple
-# Silicon. Pull requests and pushes get an ad-hoc signed app; tags matching
-# bar-mac-v* are signed and notarized when the Developer ID secrets are set and
-# publish the DMG as a GitHub release.
+# Builds the engine for BAR's macOS launcher (engine + Mesa/Zink/KosmicKrisp,
+# recoil_<version>_arm64-macos.7z) for Apple Silicon. Pull requests and pushes
+# get an ad-hoc signed engine; tags matching bar-mac-v* are signed and notarized
+# when the Developer ID secrets are set and publish the archive as a GitHub
+# release, which the launcher (leonseemann/spring-launcher, branch bar-mac)
+# downloads as configured in its bar-mac/config.json.
 #
 # Secrets (all optional, without them or set to CHANGE_ME the app is ad-hoc signed):
 #   MACOS_CERT_P12         base64 of the exported "Developer ID Application" .p12
@@ -84,12 +86,8 @@ jobs:
           IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -o '"Developer ID Application:[^"]*"' | head -n1 | tr -d '"')"
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
-      - name: Bundle app
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
-            export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
-          fi
-          MESA_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+      - name: Bundle engine
+        run: MESA_PREFIX="$RUNNER_TEMP/mesa-prefix" installer/Mac/make-bar-engine.sh build dist
 
       - name: Notarize
         if: env.IS_RELEASE == 'true' && env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
@@ -98,20 +96,20 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          xcrun notarytool submit dist/BAR-*.dmg --wait \
+          # the same signed files as in the 7z archive, which notarytool does not take
+          xcrun notarytool submit dist/engine-notarize.zip --wait \
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
-          xcrun stapler staple dist/BAR-*.dmg
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BAR-macos
-          path: dist/BAR-*.dmg
+          name: BAR-macos-engine
+          path: dist/recoil_*.7z
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/bar-mac-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/BAR-*.dmg \
-            --title "BAR for macOS ($GITHUB_REF_NAME)" \
-            --notes "Beyond All Reason for Apple Silicon Macs (engine $ENGINE_VERSION). Open the DMG, drag BAR into Applications and start it; the game is downloaded from the official BAR servers on first start."
+          gh release create "$GITHUB_REF_NAME" dist/recoil_*.7z \
+            --title "BAR for macOS engine ($GITHUB_REF_NAME)" \
+            --notes "Recoil engine $ENGINE_VERSION for BAR on Apple Silicon Macs. The BAR launcher for macOS downloads it, get the launcher from https://github.com/leonseemann/spring-launcher/releases/latest."
