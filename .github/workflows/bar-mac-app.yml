@@ -42,7 +42,8 @@ jobs:
         run: |
           brew update
           # no jsoncpp: Homebrew builds it against libc++, so the engine uses its bundled copy
-          brew install cmake ninja meson bison pkg-config gcc sevenzip devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          brew install cmake ninja meson bison pkg-config gcc sevenzip devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3 vulkan-loader \
+            molten-vk llvm spirv-llvm-translator spirv-tools glslang zstd
           brew uninstall --ignore-dependencies jsoncpp 2>/dev/null || true
 
       - name: Build engine
@@ -61,7 +62,7 @@ jobs:
             -DBUILD_spring-headless=OFF
           cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
 
-      - name: Build Mesa (EGL + patched Zink)
+      - name: Build Mesa (EGL + patched Zink + KosmicKrisp)
         run: installer/Mac/make-mesa.sh "$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa-prefix"
 
       - name: Import signing certificate
@@ -88,7 +89,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
             export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
           fi
-          ZINK_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+          MESA_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
 
       - name: Notarize
         if: env.IS_RELEASE == 'true' && env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
