@@ -24,10 +24,18 @@ LIBCLC_VERSION=22.1.8.3
 LIBCLC_SRC="$WORK_DIR/mesa-libclc-$LIBCLC_VERSION"
 LIBCLC_PREFIX="$WORK_DIR/libclc-install"
 
+# archive.mesa3d.org is down now and then, the tag on Mesa's GitLab has the same sources
+download() {
+	curl -fL --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 30 -o "$@"
+}
+
 if [ ! -d "$MESA_SRC" ]; then
-	[ -f "$WORK_DIR/mesa-$MESA_VERSION.tar.xz" ] ||
-		curl -fL -o "$WORK_DIR/mesa-$MESA_VERSION.tar.xz" "https://archive.mesa3d.org/mesa-$MESA_VERSION.tar.xz"
-	tar -xf "$WORK_DIR/mesa-$MESA_VERSION.tar.xz" -C "$WORK_DIR"
+	MESA_TARBALL="$WORK_DIR/mesa-$MESA_VERSION.tar"
+	[ -f "$MESA_TARBALL" ] ||
+		download "$MESA_TARBALL" "https://archive.mesa3d.org/mesa-$MESA_VERSION.tar.xz" ||
+		download "$MESA_TARBALL" "https://gitlab.freedesktop.org/mesa/mesa/-/archive/mesa-$MESA_VERSION/mesa-mesa-$MESA_VERSION.tar.gz"
+	mkdir -p "$MESA_SRC"
+	tar -xf "$MESA_TARBALL" -C "$MESA_SRC" --strip-components 1
 	for p in "$SRC_DIR"/installer/Mac/mesa-patches/*.patch; do
 		patch -d "$MESA_SRC" -p1 < "$p"
 	done
@@ -37,7 +45,7 @@ fi
 # Homebrew's mesa uses this fork for the same reason
 if [ ! -f "$LIBCLC_PREFIX/share/pkgconfig/mesa-libclc.pc" ]; then
 	[ -f "$WORK_DIR/mesa-libclc-$LIBCLC_VERSION.tar.bz2" ] ||
-		curl -fL -o "$WORK_DIR/mesa-libclc-$LIBCLC_VERSION.tar.bz2" \
+		download "$WORK_DIR/mesa-libclc-$LIBCLC_VERSION.tar.bz2" \
 			"https://gitlab.freedesktop.org/karolherbst/mesa-libclc/-/archive/$LIBCLC_VERSION/mesa-libclc-$LIBCLC_VERSION.tar.bz2"
 	tar -xf "$WORK_DIR/mesa-libclc-$LIBCLC_VERSION.tar.bz2" -C "$WORK_DIR"
 	cmake -S "$LIBCLC_SRC" -B "$LIBCLC_SRC/build" -G Ninja \
