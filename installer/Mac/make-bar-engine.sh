@@ -94,7 +94,9 @@ codesign --verify --deep --strict "$G"
 
 ARCHIVE="$OUT_DIR/recoil_${VERSION}_arm64-macos.7z"
 rm -f "$ARCHIVE"
-(cd "$WORK" && "$SEVENZIP" a -snl -mx=9 "$ARCHIVE" Engine.app >/dev/null)
+# no executable filters: current 7-Zip picks its ARM64 filter, which the 7za
+# 16.02 the launcher extracts with does not know ("Unsupported Method")
+(cd "$WORK" && "$SEVENZIP" a -snl -mx=9 -mf=off "$ARCHIVE" Engine.app >/dev/null)
 # for notarization, which does not take 7z archives
 [ "$SIGN_IDENTITY" = "-" ] || ditto -c -k --keepParent "$G" "$OUT_DIR/engine-notarize.zip"
 echo "$ARCHIVE"
