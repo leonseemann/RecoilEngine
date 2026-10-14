@@ -49,6 +49,8 @@ jobs:
           brew install cmake ninja pkg-config gcc ccache sevenzip devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3 vulkan-loader \
             spirv-tools zstd
           brew uninstall --ignore-dependencies jsoncpp 2>/dev/null || true
+          # ccache needs fmt's library, but its headers would shadow the engine's own fmt
+          brew unlink fmt
           echo "spirv-tools=$(brew list --versions spirv-tools | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
 
       # tag builds can only read caches of the default branch (macos-port-*),
