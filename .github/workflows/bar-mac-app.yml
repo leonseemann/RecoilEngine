@@ -13,6 +13,7 @@
 name: BAR macOS app
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - 'macos-port-*'
@@ -25,7 +26,7 @@ permissions:
 jobs:
   build:
     if: github.repository != 'beyond-all-reason/RecoilEngine'
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       ENGINE_VERSION: '2026.07.04'
       IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/bar-mac-v') }}
@@ -40,17 +41,29 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install cmake ninja pkg-config sevenzip devil fontconfig freetype jsoncpp libvorbis minizip openal-soft sdl2-compat sdl3 mesa vulkan-loader
+          # no jsoncpp: Homebrew builds it against libc++, so the engine uses its bundled copy
+          brew install cmake ninja meson bison pkg-config gcc sevenzip devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3 vulkan-loader \
+            molten-vk llvm spirv-llvm-translator spirv-tools glslang zstd
+          brew uninstall --ignore-dependencies jsoncpp 2>/dev/null || true
 
       - name: Build engine
         run: |
+          # GCC like the Linux and Windows builds, for the same floating point behaviour
+          GCC_BIN="$(ls "$(brew --prefix gcc)"/bin/gcc-[0-9]* | sort -V | tail -n1)"
           cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER="$GCC_BIN" \
+            -DCMAKE_CXX_COMPILER="${GCC_BIN/gcc-/g++-}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DVERSION_OVERRIDE="$ENGINE_VERSION" \
+            -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
+            -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
             -DAI_TYPES=NATIVE \
             -DBUILD_spring-dedicated=OFF \
             -DBUILD_spring-headless=OFF
           cmake --build build --target spring unitsync pr-downloader_cli basecontent C-AIInterface NullAI BARb
+
+      - name: Build Mesa (EGL + patched Zink + KosmicKrisp)
+        run: installer/Mac/make-mesa.sh "$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa-prefix"
 
       - name: Import signing certificate
         if: env.IS_RELEASE == 'true' && env.HAS_CERT == 'true'
@@ -72,7 +85,11 @@ jobs:
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Bundle app
-        run: MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/bar-mac-v* ]]; then
+            export APP_RELEASE="$GITHUB_REPOSITORY $GITHUB_REF_NAME"
+          fi
+          MESA_PREFIX="$RUNNER_TEMP/mesa-prefix" MAKE_DMG=1 installer/Mac/make-bar-app.sh build dist
 
       - name: Notarize
         if: env.IS_RELEASE == 'true' && env.HAS_NOTARY == 'true' && env.SIGN_IDENTITY != ''
