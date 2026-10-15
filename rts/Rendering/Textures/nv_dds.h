@@ -223,6 +223,7 @@ namespace nv_dds
 
             bool upload_texture1D() const;
             bool upload_texture2D(unsigned int imageIndex, int target) const;
+            bool upload_texture2D_decompressed(unsigned int imageIndex, int target) const;
             bool upload_texture3D() const;
             bool upload_textureRectangle() const;
             bool upload_textureCubemap() const;
