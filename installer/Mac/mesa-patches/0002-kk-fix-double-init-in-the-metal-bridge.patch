@@ -1,0 +1,74 @@
+From e4174f891a8c9a99b70e1ad84496511973250d7a Mon Sep 17 00:00:00 2001
+From: Robin Kertels <robin.kertels@gmail.com>
+Date: Mon, 10 Aug 2026 23:50:14 +0200
+Subject: [PATCH] kk: Fix double init in the Metal bridge
+
+Signed-off-by: Robin Kertels <robin.kertels@gmail.com>
+Reviewed-by: Aitor Camacho <aitor@lunarg.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/43640>
+---
+ src/kosmickrisp/bridge/mtl_argument_table.m | 2 +-
+ src/kosmickrisp/bridge/mtl_command_queue.m  | 2 +-
+ src/kosmickrisp/bridge/mtl_render_state.m   | 6 +++---
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/kosmickrisp/bridge/mtl_argument_table.m b/src/kosmickrisp/bridge/mtl_argument_table.m
+index 32b83759fb3a..5253055b907b 100644
+--- a/src/kosmickrisp/bridge/mtl_argument_table.m
++++ b/src/kosmickrisp/bridge/mtl_argument_table.m
+@@ -13,7 +13,7 @@ mtl_argument_table_descriptor *
+ mtl_new_argument_table_descriptor()
+ {
+    @autoreleasepool {
+-      return [[MTL4ArgumentTableDescriptor new] init];
++      return [MTL4ArgumentTableDescriptor new];
+    }
+ }
+ 
+diff --git a/src/kosmickrisp/bridge/mtl_command_queue.m b/src/kosmickrisp/bridge/mtl_command_queue.m
+index 4dc6332974f4..c8ed5bb10b40 100644
+--- a/src/kosmickrisp/bridge/mtl_command_queue.m
++++ b/src/kosmickrisp/bridge/mtl_command_queue.m
+@@ -14,7 +14,7 @@ mtl_commit_options *
+ mtl_new_commit_options(void)
+ {
+    @autoreleasepool {
+-      return [[MTL4CommitOptions new] init];
++      return [MTL4CommitOptions new];
+    }
+ }
+ 
+diff --git a/src/kosmickrisp/bridge/mtl_render_state.m b/src/kosmickrisp/bridge/mtl_render_state.m
+index 5cd40df43de9..b37e181fa95b 100644
+--- a/src/kosmickrisp/bridge/mtl_render_state.m
++++ b/src/kosmickrisp/bridge/mtl_render_state.m
+@@ -22,7 +22,7 @@ mtl_render_pass_descriptor *
+ mtl_new_render_pass_descriptor(void)
+ {
+    @autoreleasepool {
+-      return [[MTL4RenderPassDescriptor new] init];
++      return [MTL4RenderPassDescriptor new];
+    }
+ }
+ 
+@@ -215,7 +215,7 @@ mtl_stencil_descriptor *
+ mtl_new_stencil_descriptor()
+ {
+    @autoreleasepool {
+-      return [[MTLStencilDescriptor new] init];
++      return [MTLStencilDescriptor new];
+    }
+ }
+ 
+@@ -305,7 +305,7 @@ mtl_depth_stencil_descriptor *
+ mtl_new_depth_stencil_descriptor()
+ {
+    @autoreleasepool {
+-      return [[MTLDepthStencilDescriptor new] init];
++      return [MTLDepthStencilDescriptor new];
+    }
+ }
+ 
+-- 
+GitLab
+
