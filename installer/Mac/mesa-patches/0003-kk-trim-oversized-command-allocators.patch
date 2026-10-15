@@ -1,0 +1,143 @@
+kk: replace command allocators that grew far beyond their recent use
+
+An MTL4CommandAllocator keeps the memory of the largest batch it encoded,
+and KosmicKrisp 26.2 begins a Metal command buffer per render pass from it
+(about 2-4 MB each). Loading screens record batches with a thousand
+passes, so BAR ended up with allocators of up to 2 GB that were never
+needed again: a 30 GB process footprint after loading a game, growing
+with every further game, as the GL context lives on between lobby and
+games.
+
+Every 64 resets, replace an allocator that is more than twice as large
+as the most command buffers it served in that window need.
+
+--- a/src/kosmickrisp/bridge/mtl_command_buffer.h
++++ b/src/kosmickrisp/bridge/mtl_command_buffer.h
+@@ -12,6 +12,8 @@
+ #include <stdint.h>
+ 
+ void mtl_command_allocator_reset(mtl_command_allocator *allocator);
++uint64_t
++mtl_command_allocator_get_allocated_size(mtl_command_allocator *allocator);
+ 
+ void mtl_begin_command_buffer(mtl_command_buffer *command_buffer,
+                               mtl_command_allocator *allocator);
+--- a/src/kosmickrisp/bridge/mtl_command_buffer.m
++++ b/src/kosmickrisp/bridge/mtl_command_buffer.m
+@@ -20,6 +20,15 @@
+    }
+ }
+ 
++uint64_t
++mtl_command_allocator_get_allocated_size(mtl_command_allocator *allocator)
++{
++   @autoreleasepool {
++      id<MTL4CommandAllocator> alloc = (id<MTL4CommandAllocator>)allocator;
++      return [alloc allocatedSize];
++   }
++}
++
+ void
+ mtl_begin_command_buffer(mtl_command_buffer *command_buffer,
+                          mtl_command_allocator *allocator)
+--- a/src/kosmickrisp/bridge/stubs/mtl_command_buffer.c
++++ b/src/kosmickrisp/bridge/stubs/mtl_command_buffer.c
+@@ -11,6 +11,12 @@
+ {
+ }
+ 
++uint64_t
++mtl_command_allocator_get_allocated_size(mtl_command_allocator *allocator)
++{
++   return 0u;
++}
++
+ void
+ mtl_begin_command_buffer(mtl_command_buffer *command_buffer,
+                          mtl_command_allocator *allocator)
+--- a/src/kosmickrisp/vulkan/kk_cmd_buffer.c
++++ b/src/kosmickrisp/vulkan/kk_cmd_buffer.c
+@@ -168,9 +168,39 @@
+    return result;
+ }
+ 
++/* An MTL4CommandAllocator keeps the memory of the largest batch it encoded,
++ * and every render pass begins its own command buffer from it. Batches with
++ * a thousand passes, as recorded while loading, leave allocators of several
++ * GB behind that are never needed again. Replace allocators that stayed far
++ * larger than what the last uses needed. */
++#define KK_ALLOCATOR_TRIM_WINDOW       64u
++#define KK_ALLOCATOR_BYTES_PER_CMD_BUF (4ull * 1024 * 1024)
++#define KK_ALLOCATOR_MIN_BYTES         (64ull * 1024 * 1024)
++
+ static void
+-kk_reset_encoder_state(struct kk_encoder_state *es)
++kk_reset_encoder_state(struct kk_encoder_state *es, mtl_device *handle)
+ {
++   es->window_max_cmd_bufs = MAX2(es->window_max_cmd_bufs, es->cmd_buf_count);
++   es->cmd_buf_count = 0u;
++
++   if (++es->window_resets >= KK_ALLOCATOR_TRIM_WINDOW) {
++      uint64_t needed_B =
++         MAX2(es->window_max_cmd_bufs * KK_ALLOCATOR_BYTES_PER_CMD_BUF,
++              KK_ALLOCATOR_MIN_BYTES);
++      es->window_resets = 0u;
++      es->window_max_cmd_bufs = 0u;
++
++      if (mtl_command_allocator_get_allocated_size(es->allocator) >
++          2u * needed_B) {
++         mtl_command_allocator *allocator = mtl_new_command_allocator(handle);
++         if (allocator) {
++            mtl_release(es->allocator);
++            es->allocator = allocator;
++            return;
++         }
++      }
++   }
++
+    mtl_command_allocator_reset(es->allocator);
+ }
+ 
+@@ -185,9 +215,9 @@
+    cs_end(cmd);
+    kk_cmd_release_resources(dev, cmd);
+ 
+-   kk_reset_encoder_state(cmd->pre_gfx);
+-   kk_reset_encoder_state(&cmd->gfx);
+-   kk_reset_encoder_state(cmd->post_gfx);
++   kk_reset_encoder_state(cmd->pre_gfx, dev->mtl_handle);
++   kk_reset_encoder_state(&cmd->gfx, dev->mtl_handle);
++   kk_reset_encoder_state(cmd->post_gfx, dev->mtl_handle);
+ 
+    cmd->uploader.bo = NULL;
+    cmd->uploader.offset = 0;
+@@ -262,6 +292,7 @@
+    assert(state->render_pass_descriptor);
+ 
+    cmd->gfx.cmd_buf = mtl_new_command_buffer(dev->mtl_handle);
++   cmd->gfx.cmd_buf_count++;
+    mtl_begin_command_buffer(cmd->gfx.cmd_buf, cmd->gfx.allocator);
+    cmd->gfx.encoder = mtl_new_render_command_encoder_with_descriptor(
+       cmd->gfx.cmd_buf, state->render_pass_descriptor);
+@@ -304,6 +335,7 @@
+                          mtl_argument_table *argument_table)
+ {
+    es->cmd_buf = mtl_new_command_buffer(handle);
++   es->cmd_buf_count++;
+    mtl_begin_command_buffer(es->cmd_buf, es->allocator);
+    es->encoder = mtl_new_compute_command_encoder(es->cmd_buf);
+ 
+--- a/src/kosmickrisp/vulkan/kk_cmd_buffer.h
++++ b/src/kosmickrisp/vulkan/kk_cmd_buffer.h
+@@ -212,6 +212,11 @@
+    mtl_command_buffer *cmd_buf;
+    /* Pending timestamp resolves (struct kk_ts_resolve), flushed at cs_end. */
+    struct util_dynarray ts_resolves;
++   /* Metal command buffers begun from the allocator since its last reset and
++    * the most of them within the current trim window. */
++   uint32_t cmd_buf_count;
++   uint32_t window_max_cmd_bufs;
++   uint32_t window_resets;
+ };
+ 
+ struct kk_cmd_buffer {
