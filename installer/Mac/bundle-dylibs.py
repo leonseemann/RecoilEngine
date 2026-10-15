@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Copies every non-system dylib the engine depends on into <engine>/lib, rewrites
-# all install names to @rpath and copies the license files of the source packages.
+# Copies every non-system dylib the engine and its AI libraries depend on into
+# <engine>/lib, rewrites all install names to @rpath and copies the license files
+# of the source packages.
 #
 # Libraries that are dlopen()ed at runtime are passed explicitly:
 #   <dir>=<source dylib>[:<bundled name>], <dir> being "lib" or "mesa"
@@ -25,10 +26,16 @@ def run(*args):
 	return subprocess.run(args, check=True, capture_output=True, text=True).stdout
 
 
+def install_name(path):
+	# empty for executables and for plugins built as bundles, like the AI libraries
+	lines = run("otool", "-D", path).splitlines()[1:]
+	return lines[0].strip() if lines else None
+
+
 def deps(path):
 	lines = run("otool", "-L", path).splitlines()[1:]
 	names = [l.strip().split(" (")[0] for l in lines]
-	if path.endswith(".dylib"):
+	if install_name(path) is not None:
 		# first entry of a dylib is its own install name
 		names = names[1:]
 	return [n for n in names if not n.startswith(SYSTEM)]
@@ -85,6 +92,8 @@ for arg in sys.argv[3:]:
 	origin[dst] = os.path.realpath(src)
 
 queue = [os.path.join(engine, f) for f in ("spring", "pr-downloader", "libunitsync.dylib")] + list(bundled.values())
+for root, _, files in os.walk(os.path.join(engine, "AI")):
+	queue += [os.path.join(root, f) for f in files if f.endswith(".dylib")]
 done = set()
 
 while queue:
@@ -107,7 +116,7 @@ while queue:
 		if name != f"@rpath/{base}":
 			run("install_name_tool", "-change", name, f"@rpath/{base}", path)
 
-	if path.endswith(".dylib"):
+	if install_name(path) is not None:
 		run("install_name_tool", "-id", f"@rpath/{os.path.basename(path)}", path)
 
 	for rp in rpaths(path):

@@ -33,6 +33,10 @@
 #include "System/Platform/Threading.h"
 #include "System/Platform/SharedLib.h"
 #include "System/Platform/WindowManagerHelper.h"
+#ifdef __APPLE__
+#include "System/Platform/Mac/AutoFill.h"
+#include "System/Platform/Mac/Keyboard.h"
+#endif
 #include "System/Platform/errorhandler.h"
 #include "System/ScopedResource.h"
 #include "System/QueueToMain.h"
@@ -414,6 +418,23 @@ static uint32_t GetFullScreenFlag(bool borderless)
 #endif
 }
 
+// Borderless windowed mode asks for a window covering a whole display, but
+// macOS keeps windows below the menu bar. Only desktop fullscreen covers it.
+static bool IsBorderlessFullScreen(bool borderless, int x, int y, int w, int h)
+{
+#ifdef __APPLE__
+	if (!borderless)
+		return false;
+
+	for (int i = 0, n = SDL_GetNumVideoDisplays(); i < n; i++) {
+		SDL_Rect r;
+		if (SDL_GetDisplayBounds(i, &r) == 0 && x <= r.x && y <= r.y && x + w >= r.x + r.w && y + h >= r.y + r.h)
+			return true;
+	}
+#endif
+	return false;
+}
+
 SDL_Window* CGlobalRendering::CreateSDLWindow(const char* title) const
 {
 	SDL_Window* newWindow = nullptr;
@@ -445,7 +466,7 @@ SDL_Window* CGlobalRendering::CreateSDLWindow(const char* title) const
 	//   and 0 for windowed mode.
 
 	uint32_t sdlFlags  = (SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-	         sdlFlags |= GetFullScreenFlag(borderless_) * fullScreen_;
+	         sdlFlags |= GetFullScreenFlag(borderless_) * (fullScreen_ || IsBorderlessFullScreen(borderless_, winPosX_, winPosY_, newRes.x, newRes.y));
 	         sdlFlags |= (SDL_WINDOW_BORDERLESS * borderless_);
 
 #ifdef MAC_EGL_BRIDGE_AVAILABLE
@@ -550,6 +571,10 @@ SDL_GLContext CGlobalRendering::CreateGLContext(const int2& minCtx)
 
 bool CGlobalRendering::CreateWindowAndContext(const char* title)
 {
+#ifdef __APPLE__
+	AutoFill::Disable();
+#endif
+
 	if (SDL_Init(SDL_INIT_VIDEO) == -1) {
 		LOG_L(L_FATAL, "[GR::%s] error \"%s\" initializing SDL", __func__, SDL_GetError());
 		return false;
@@ -602,6 +627,10 @@ bool CGlobalRendering::CreateWindowAndContext(const char* title)
 
 	if ((sdlWindow = CreateSDLWindow(title)) == nullptr)
 		return false;
+
+#ifdef __APPLE__
+	MacKeyboard::Init();
+#endif
 
 	if (configHandler->GetInt("MinimizeOnFocusLoss") == 0)
 		SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
@@ -1310,7 +1339,9 @@ void CGlobalRendering::SetWindowAttributes(SDL_Window* window)
 	SDL_SetWindowPosition(window, winPosX, winPosY);
 	SDL_SetWindowSize(window, newRes.x, newRes.y);
 
-	if (SDL_SetWindowFullscreen(window, GetFullScreenFlag(borderless) * fullScreen) != 0)
+	const bool sdlFullScreen = fullScreen || IsBorderlessFullScreen(borderless, winPosX, winPosY, newRes.x, newRes.y);
+
+	if (SDL_SetWindowFullscreen(window, GetFullScreenFlag(borderless) * sdlFullScreen) != 0)
 		LOG("[GR::%s][4][SDL_SetWindowFullscreen] err=\"%s\"", __func__, SDL_GetError());
 
 	SDL_SetWindowBordered(window, borderless ? SDL_FALSE : SDL_TRUE);
