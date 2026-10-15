@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds Mesa's EGL, Zink (with the patches from installer/Mac/mesa-patches)
-# and KosmicKrisp at a fixed Mesa version.
+# Builds Mesa's EGL, Zink and KosmicKrisp at a fixed Mesa version, with the
+# patches from installer/Mac/mesa-patches applied.
 #
 # The version is pinned on purpose: KosmicKrisp from Mesa 26.3 on unrolls every
 # draw whose fragment shader has flat inputs and restarts the render pass for it,
