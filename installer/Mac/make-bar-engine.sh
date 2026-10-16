@@ -49,15 +49,9 @@ for ai in AI/Interfaces/C AI/Skirmish/NullAI AI/Skirmish/BARb; do
 done
 
 # Mesa EGL + Zink + KosmicKrisp, loaded by MacEGLBridge from <engine>/mesa
-cat > "$ENGINE/mesa/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json" <<EOF
-{
-    "ICD": {
-        "api_version": "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ICD"]["api_version"])' "$MESA_PREFIX/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json")",
-        "library_path": "../../../lib/libvulkan_kosmickrisp.dylib"
-    },
-    "file_format_version": "1.0.1"
-}
-EOF
+sed 's|"library_path": ".*"|"library_path": "../../../lib/libvulkan_kosmickrisp.dylib"|' \
+	"$MESA_PREFIX/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json" \
+	> "$ENGINE/mesa/share/vulkan/icd.d/kosmickrisp_mesa_icd.aarch64.json"
 
 # copy all non-system dylib dependencies and make every reference bundle relative;
 # sdl2-compat dlopen()s SDL3 from next to itself
