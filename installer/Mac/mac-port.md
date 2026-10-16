@@ -1,8 +1,9 @@
 # Recoil on macOS (Apple Silicon)
 
 This port runs Recoil, and with it Beyond All Reason, natively on Apple Silicon
-Macs with macOS 26 or later. It is used for online games on the official BAR
-servers. Replays recorded on x86 Linux/Windows play back on it without desyncs.
+Macs with macOS 26 or later. Replays recorded on x86 Linux/Windows play back on
+it without desyncs. Online play on the official servers is paused until an
+organized test session on the BAR test server.
 
 ## How it renders
 
@@ -87,12 +88,37 @@ upstream PRs (#3492, #3493, #3494, #3516).
 
 ## Verification
 
-- Sync: x86 replays of online games played back on the Mac build with 0 sync
-  errors, with both the Apple Clang and the GCC builds. For
-  2026.09.01, for which no online replays existed, the reference was a BARb vs
-  BARb game recorded with the official amd64-linux engine in Docker.
-- Online play on the official servers, lobby/game cycles,
-  long games for memory growth, and a 150-unit and a 650-unit benchmark.
+### Sync testing
+
+Recoil writes a checksum of the synced game state into every demo. During
+playback the engine recomputes it and logs `[DESYNC WARNING] checksum ... from
+demo ... does not match our checksum` on a mismatch (`rts/Net/NetCommands.cpp`).
+A replay that runs to the end without that line was simulated bit-identically
+to the machine that recorded it.
+
+Method:
+- Each replay runs in its own write dir with `--isolation`, so no local
+  settings or widgets interfere: `run_demo.sh <engine> <demo.sdfz> <run-name>`.
+- After the run, `grep -c "DESYNC WARNING" infolog.txt` must be 0.
+- Negative control: the 2026.09.01 build playing a 2026.07.04 demo logs 486
+  desync warnings, so the check does catch a real mismatch.
+
+Results:
+
+| Engine | Reference replays | Runs | Desync warnings |
+|---|---|---|---|
+| 2026.07.04, GCC | 5 online games (4 Isidis Crack, 1 Rosetta) recorded on x86 Linux/Windows | 5 | 0 |
+| 2026.07.04, Apple Clang | the Rosetta game | 1 | 0 |
+| 2026.09.01, GCC | 2 BARb vs BARb games recorded with the official amd64-linux engine in Docker (Isidis Crack, Rosetta; the longer one about 155,000 frames) | 2 | 0 |
+
+The replays are short to medium games. They do not prove the absence of rare
+desyncs, which is what an organized test session on the BAR test server is
+for.
+
+### Other checks
+
+Lobby/game cycles, long games for memory growth, and a 150-unit and a 650-unit
+benchmark.
 
 ## AI assistance
 
