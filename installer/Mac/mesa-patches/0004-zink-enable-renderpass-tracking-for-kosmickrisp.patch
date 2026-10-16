@@ -1,0 +1,31 @@
+From 95c504fa17a3912e56df37a7c24ca983d69be33e Mon Sep 17 00:00:00 2001
+From: Vandomas <vandcim@gmail.com>
+Date: Wed, 19 Aug 2026 10:42:39 +0300
+Subject: [PATCH] zink: enable renderpass tracking for KosmicKrisp
+
+Same logic as the other drivers in this list. Without tracking, zink
+can't merge adjacent renderpasses on KosmicKrisp, so every pass costs
+a full tile store and reload. Beyond All Reason on an M3 Max: from
+20+- render encoders per frame down to 11.5+-, and from 79 to 85-93 fps
+depending on run
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/43857>
+---
+ src/gallium/drivers/zink/zink_screen.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 9c83af6ef209..85a7e79c32e6 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -3120,6 +3120,7 @@ init_driver_workarounds(struct zink_screen *screen)
+    case VK_DRIVER_ID_BROADCOM_PROPRIETARY:
+    case VK_DRIVER_ID_ARM_PROPRIETARY:
+    case VK_DRIVER_ID_MESA_HONEYKRISP:
++   case VK_DRIVER_ID_MESA_KOSMICKRISP:
+       screen->driver_workarounds.track_renderpasses = true; //screen->info.primgen_feats.primitivesGeneratedQueryWithRasterizerDiscard
+       break;
+    default:
+-- 
+GitLab
+
