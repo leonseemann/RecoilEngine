@@ -5,14 +5,14 @@
 # release, which the launcher (leonseemann/spring-launcher, branch bar-mac)
 # downloads as configured in its bar-mac/config.json.
 #
-# Secrets (all optional, without them or set to CHANGE_ME the app is ad-hoc signed):
+# Secrets (all optional, without them or set to CHANGE_ME the engine is ad-hoc signed):
 #   MACOS_CERT_P12         base64 of the exported "Developer ID Application" .p12
 #   MACOS_CERT_PASSWORD    password of that .p12
 #   APPLE_ID               Apple ID used for notarization
 #   APPLE_TEAM_ID          team id of the Developer ID certificate
 #   APPLE_APP_PASSWORD     app-specific password of that Apple ID
 
-name: BAR macOS app
+name: macOS engine
 on:
   workflow_dispatch:
   pull_request:
