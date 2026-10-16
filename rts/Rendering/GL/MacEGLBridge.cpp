@@ -239,11 +239,16 @@ namespace WideLines {
 		if (lineWidth < 1.5f || !IsLineMode(mode))
 			return;
 
-		// queried instead of tracked, glPopAttrib restores it behind our back
+		// glPopAttrib restores width and viewport behind our back, so query both before redrawing
+		GLfloat width = 1.0f;
+		glGetFloatv(GL_LINE_WIDTH, &width);
+		if (width < 1.5f)
+			return;
+
 		GLint viewport[4] = {};
 		glGetIntegerv(GL_VIEWPORT, viewport);
 
-		const int radius = static_cast<int>((lineWidth - 1.0f) * 0.5f + 0.5f);
+		const int radius = static_cast<int>((width - 1.0f) * 0.5f + 0.5f);
 		for (int i = 1; i <= radius; ++i) {
 			const int offsets[4][2] = {{i, 0}, {-i, 0}, {0, i}, {0, -i}};
 			for (const auto& o: offsets) {
