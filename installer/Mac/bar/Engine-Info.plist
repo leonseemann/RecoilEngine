@@ -19,7 +19,7 @@
 	<key>CFBundleIconFile</key>
 	<string>spring.icns</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>###MIN_OS###</string>
+	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>
