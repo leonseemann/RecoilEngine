@@ -30,7 +30,6 @@ jobs:
     if: github.repository != 'beyond-all-reason/RecoilEngine'
     runs-on: macos-26
     env:
-      ENGINE_VERSION: '2026.07.04'
       IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/bar-mac-v') }}
       HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_P12 != 'CHANGE_ME' }}
       HAS_NOTARY: ${{ secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_APP_PASSWORD != 'CHANGE_ME' }}
@@ -39,6 +38,14 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+
+      # BAR's lobby compares the engine version, so the engine reports the
+      # release it is based on instead of "<release>-<commits>-g<hash> <branch>"
+      - name: Set the engine version
+        run: |
+          ENGINE_VERSION="$(git describe --tags --abbrev=0 --match '20[0-9][0-9].[0-9][0-9].[0-9][0-9]')"
+          git tag -f "$ENGINE_VERSION" HEAD
+          echo "ENGINE_VERSION=$ENGINE_VERSION" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         id: deps
@@ -76,7 +83,6 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_BUILD_TYPE=Release \
-            -DVERSION_OVERRIDE="$ENGINE_VERSION" \
             -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
             -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
             -DAI_TYPES=NATIVE \
