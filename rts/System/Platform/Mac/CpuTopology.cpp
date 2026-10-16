@@ -19,10 +19,8 @@ static uint32_t SysctlU32(const char* name, uint32_t def = 0) {
 }
 
 static uint32_t MakeMask(uint32_t first, uint32_t count) {
-	uint32_t mask = 0;
-	for (uint32_t i = first; i < first + count && i < 32; ++i)
-		mask |= (1u << i);
-	return mask;
+	const uint64_t bits = (count >= 32) ? ~0ull : ((1ull << count) - 1);
+	return static_cast<uint32_t>(bits << first);
 }
 
 ThreadPinPolicy GetThreadPinPolicy() {
@@ -31,14 +29,8 @@ ThreadPinPolicy GetThreadPinPolicy() {
 
 ProcessorMasks GetProcessorMasks() {
 	ProcessorMasks masks;
-	const uint32_t numLevels = SysctlU32("hw.nperflevels", 1);
-	const uint32_t total = SysctlU32("hw.logicalcpu", 1);
-
-	if (numLevels <= 1) {
-		masks.performanceCoreMask = MakeMask(0, total);
-		return masks;
-	}
-	const uint32_t perf = SysctlU32("hw.perflevel0.logicalcpu", total);
+	// without performance levels (Intel) all cores count as performance cores
+	const uint32_t perf = SysctlU32("hw.perflevel0.logicalcpu", SysctlU32("hw.logicalcpu", 1));
 	const uint32_t eff  = SysctlU32("hw.perflevel1.logicalcpu", 0);
 	// cpu ids are not ordered by perf level; masks are only used as counts
 	masks.performanceCoreMask = MakeMask(0, perf);
