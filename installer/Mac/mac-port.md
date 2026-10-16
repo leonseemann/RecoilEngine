@@ -47,6 +47,7 @@ Mesa (26.2.4) with these patches:
 | 0001 Zink: refetch the pipeline on a vertex input change (fixes vanishing display-list text and purple stripes) | Upstream as mesa!45132, contained in 26.2.5 |
 | 0002 KosmicKrisp: fix the double init in the Metal bridge (leaked a descriptor array per render pass) | Backport of upstream e4174f891a8c (Mesa 26.3) |
 | 0003 KosmicKrisp: drop command allocators that outgrew their use (30-70 GB footprint after a few games) | Ours, not upstream |
+| 0004 Zink: enable renderpass tracking for KosmicKrisp (about +3 % fps in the 150-unit benchmark: 71.5 vs 69.1 fps mean, 6 runs against 10, faster in every interleaved pair, identical screenshots) | Backport of upstream 95c504fa (Mesa 26.3) |
 
 Mesa 26.3 / main is currently slower on this workload, because KosmicKrisp ends
 the render encoder for every compute dispatch and unrolls draws for flat
