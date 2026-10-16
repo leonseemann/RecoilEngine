@@ -34,7 +34,6 @@
 #include "System/Platform/SharedLib.h"
 #include "System/Platform/WindowManagerHelper.h"
 #ifdef __APPLE__
-#include "System/Platform/Mac/AutoFill.h"
 #include "System/Platform/Mac/Keyboard.h"
 #endif
 #include "System/Platform/errorhandler.h"
@@ -471,8 +470,7 @@ SDL_Window* CGlobalRendering::CreateSDLWindow(const char* title) const
 
 #ifdef MAC_EGL_BRIDGE_AVAILABLE
 	// the GL context lives offscreen (Mesa EGL), the window is only presented to
-	if (MacEGLBridge::Wanted())
-		sdlFlags &= ~SDL_WINDOW_OPENGL;
+	sdlFlags &= ~SDL_WINDOW_OPENGL;
 #endif
 
 	for (size_t i = 0; i < (aaLvls.size()) && (newWindow == nullptr); i++) {
@@ -518,11 +516,9 @@ SDL_GLContext CGlobalRendering::CreateGLContext(const int2& minCtx)
 	}
 
 #ifdef MAC_EGL_BRIDGE_AVAILABLE
-	if (MacEGLBridge::Wanted()) {
-		if ((newContext = MacEGLBridge::CreateContext(sdlWindow, minCtx.x, minCtx.y, forceCoreContext, false)) == nullptr)
-			handleerror(nullptr, "[GR] could not create Mesa EGL/Zink GL context (set RECOIL_MAC_NATIVE_GL=1 to use Apple's GL)", "ERROR", MBF_OK | MBF_EXCL);
-		return newContext;
-	}
+	if ((newContext = MacEGLBridge::CreateContext(sdlWindow, minCtx.x, minCtx.y, forceCoreContext)) == nullptr)
+		handleerror(nullptr, "[GR] could not create Mesa EGL/Zink GL context", "ERROR", MBF_OK | MBF_EXCL);
+	return newContext;
 #endif
 
 	if ((newContext = SDL_GL_CreateContext(sdlWindow)) != nullptr)
@@ -572,7 +568,7 @@ SDL_GLContext CGlobalRendering::CreateGLContext(const int2& minCtx)
 bool CGlobalRendering::CreateWindowAndContext(const char* title)
 {
 #ifdef __APPLE__
-	AutoFill::Disable();
+	MacKeyboard::DisableAutoFill();
 #endif
 
 	if (SDL_Init(SDL_INIT_VIDEO) == -1) {
