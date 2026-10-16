@@ -25,11 +25,7 @@ include(UtilVersion)
 
 
 # Fetch through git or from the VERSION file
-if     (VERSION_OVERRIDE)
-	set(SPRING_ENGINE_VERSION "${VERSION_OVERRIDE}")
-else   ()
-	fetch_spring_version(${SOURCE_ROOT} SPRING_ENGINE)
-endif  ()
+fetch_spring_version(${SOURCE_ROOT} SPRING_ENGINE)
 parse_spring_version(SPRING_VERSION_ENGINE "${SPRING_ENGINE_VERSION}")
 
 # We define these, so it may be used in the to-be-configured files
