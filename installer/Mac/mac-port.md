@@ -111,6 +111,7 @@ Results:
 | 2026.07.04, GCC | 5 online games (4 Isidis Crack, 1 Rosetta) recorded on x86 Linux/Windows | 5 | 0 |
 | 2026.07.04, Apple Clang | the Rosetta game | 1 | 0 |
 | 2026.09.01, GCC | 2 BARb vs BARb games recorded with the official amd64-linux engine in Docker (Isidis Crack, Rosetta; the longer one about 155,000 frames) | 2 | 0 |
+| 2026.09.01, GCC, with the symbol visibility fix (#45) | the same 2 BARb games | 2 | 0 |
 
 The replays are short to medium games. They do not prove the absence of rare
 desyncs, which is what an organized test session on the BAR test server is
@@ -158,5 +159,9 @@ What Claude Code did, by area:
   bridge setup, keyboard, CpuTopology and DDS code (about 100 lines); simpler
   build tooling (required `MESA_PREFIX`, a fixed minimum macOS, the engine
   version taken from the release tag instead of a `VERSION_OVERRIDE` option).
+- **Outside contributions**: reviewed and tested the symbol visibility fix
+  and the crash handler stack traces by yvessommer (fork PRs #44, #45),
+  including the BARb sync replays above. Backported Mesa's Zink renderpass
+  tracking for KosmicKrisp (patch 0004) after measuring about +3% fps.
   Tested with the benchmark, a CI-built engine and the keyboard aliases by
   hand.
