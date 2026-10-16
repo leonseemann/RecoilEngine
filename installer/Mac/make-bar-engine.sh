@@ -26,7 +26,6 @@ VULKAN_PREFIX="${VULKAN_PREFIX:-$(brew --prefix vulkan-loader)}"
 SDL3_PREFIX="${SDL3_PREFIX:-$(brew --prefix sdl3)}"
 BUNDLE_ID="${BUNDLE_ID:-io.github.recoil.bar-mac.engine}"
 VERSION="$(head -n1 "$BUILD_DIR/VERSION")"
-MIN_OS="$(sw_vers -productVersion | cut -d. -f1).0"
 SEVENZIP="$(command -v 7zz || command -v 7z)"
 
 WORK="$(mktemp -d)"
@@ -73,7 +72,7 @@ for f in "$ENGINE"/*; do
 	ln -s "../Resources/$(basename "$f")" "$G/Contents/MacOS/$(basename "$f")"
 done
 cp "$SRC_DIR/installer/Mac/spring.icns" "$ENGINE/"
-sed -e "s/###VERSION###/$VERSION/g" -e "s/###BUNDLE_ID###/$BUNDLE_ID/g" -e "s/###MIN_OS###/$MIN_OS/g" \
+sed -e "s/###VERSION###/$VERSION/g" -e "s/###BUNDLE_ID###/$BUNDLE_ID/g" \
 	"$SRC_DIR/installer/Mac/bar/Engine-Info.plist" > "$G/Contents/Info.plist"
 
 # sign inside out
