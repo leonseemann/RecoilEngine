@@ -125,7 +125,11 @@ What Claude Code did, by area:
   of the BAR launcher (separate repository).
 - **Verification tooling**: the replay sync rig (including the Docker x86
   reference) and the benchmark and lobby-cycle rigs.
-- **Cleanup (2026-10-16)**: an audit of the whole port, three bug fixes (DDS
+- **Cleanup (2026-10-16)**: an audit of the whole port; three bug fixes (DDS
   BC4/5/7 decoded as DXT1, the HardwareCursor setting ignored at startup, stale
-  wide line width), rewriting the history as this linear series, and trimming
-  about 100 lines.
+  wide line width); rewriting the history as this linear series; trimming the
+  bridge setup, keyboard, CpuTopology and DDS code (about 100 lines); simpler
+  build tooling (required `MESA_PREFIX`, a fixed minimum macOS, the engine
+  version taken from the release tag instead of a `VERSION_OVERRIDE` option).
+  Tested with the benchmark, a CI-built engine and the keyboard aliases by
+  hand.
