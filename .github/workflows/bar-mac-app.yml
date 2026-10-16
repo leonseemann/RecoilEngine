@@ -16,9 +16,13 @@ name: macOS engine
 on:
   workflow_dispatch:
   pull_request:
+    paths-ignore:
+      - '**.md'
   push:
     branches:
       - 'macos-port-*'
+    paths-ignore:
+      - '**.md'
     tags:
       - 'bar-mac-v*'
 
