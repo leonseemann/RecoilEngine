@@ -1791,7 +1791,7 @@ uint32_t CBitmap::CreateDDSTexture(const GL::TextureCreationParams& tcp) const
 
 			// drivers that cannot generate mipmaps of compressed formats on the GPU (Mesa)
 			// read the texture back for it, which stalls until the GPU has caught up
-			const bool decompress = ddsimage.is_compressed() && NeedsGeneratedMipmaps(ddsimage.get_num_mipmaps(), tcp.GetMinFilter(ddsimage.get_num_mipmaps()));
+			const bool decompress = ddsimage.is_s3tc() && NeedsGeneratedMipmaps(ddsimage.get_num_mipmaps(), tcp.GetMinFilter(ddsimage.get_num_mipmaps()));
 			const bool uploaded = decompress
 				? ddsimage.upload_texture2D_decompressed(0, GL_TEXTURE_2D)
 				: ddsimage.upload_texture2D(0, GL_TEXTURE_2D);

@@ -820,6 +820,13 @@ bool CDDSImage::is_compressed() const
 		   (m_format == GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM));
 }
 
+bool CDDSImage::is_s3tc() const
+{
+	return ((m_format == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT) ||
+		   (m_format == GL_COMPRESSED_RGBA_S3TC_DXT3_EXT) ||
+		   (m_format == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT));
+}
+
 #ifndef HEADLESS
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -955,7 +962,7 @@ bool CDDSImage::upload_texture2D_decompressed(unsigned int imageIndex, int targe
 	RECOIL_DETAILED_TRACY_ZONE;
     assert(m_valid);
     assert(imageIndex < m_images.size());
-    assert(is_compressed());
+    assert(is_s3tc());
 
     const CTexture &image = m_images[imageIndex];
 
