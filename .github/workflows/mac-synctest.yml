@@ -1,0 +1,176 @@
+# Runs BAR's synctest (test/synctest, see synctest.yml) nightly with the macOS
+# engine of each release branch and with the official amd64-linux engine of the
+# release that branch is based on, and fails if the sync hashes differ.
+
+name: macOS sync test
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/mac-synctest.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+env:
+  HASH_FILE: synctest_synchash.json
+
+jobs:
+  synctest:
+    if: github.repository != 'beyond-all-reason/RecoilEngine'
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [macos-port-2026.07.04, macos-port-2026.09.01]
+        platform: [arm64-macos, amd64-linux]
+        include:
+          - platform: arm64-macos
+            runs-on: macos-26
+          - platform: amd64-linux
+            runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          submodules: ${{ matrix.platform == 'arm64-macos' && 'recursive' || 'false' }}
+          fetch-depth: 0
+
+      - name: Read the pinned game and map
+        run: |
+          ENGINE_VERSION="$(git describe --tags --abbrev=0 --match '20[0-9][0-9].[0-9][0-9].[0-9][0-9]')"
+          GAME="$(sed -n 's/^  GAME: "\(.*\)"$/\1/p' .github/workflows/synctest.yml)"
+          MAP="$(sed -n 's/^  MAP: "\(.*\)"$/\1/p' .github/workflows/synctest.yml)"
+          echo "ENGINE_VERSION=$ENGINE_VERSION" >> "$GITHUB_ENV"
+          echo "GAME=$GAME" >> "$GITHUB_ENV"
+          echo "MAP=$MAP" >> "$GITHUB_ENV"
+          echo "$ENGINE_VERSION / $GAME / $MAP"
+
+      - name: Download the official engine
+        if: matrix.platform == 'amd64-linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$ENGINE_VERSION" -R beyond-all-reason/RecoilEngine \
+            -p "recoil_${ENGINE_VERSION}_amd64-linux.7z" -D engine-artifact
+          7z x engine-artifact/*.7z -oinstall
+
+      - name: Install dependencies
+        if: matrix.platform == 'arm64-macos'
+        run: |
+          brew update
+          brew install cmake ninja pkg-config gcc ccache devil fontconfig freetype libvorbis minizip openal-soft sdl2-compat sdl3
+          brew uninstall --ignore-dependencies jsoncpp 2>/dev/null || true
+          brew unlink fmt
+
+      - name: Restore compiler cache
+        if: matrix.platform == 'arm64-macos'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key: ccache-headless-${{ matrix.branch }}-${{ github.run_id }}
+          restore-keys: ccache-headless-${{ matrix.branch }}-
+
+      - name: Build engine
+        if: matrix.platform == 'arm64-macos'
+        env:
+          CCACHE_MAXSIZE: 1G
+          CCACHE_COMPRESS: 'true'
+        run: |
+          export CCACHE_DIR="$HOME/.ccache"
+          GCC_BIN="$(ls "$(brew --prefix gcc)"/bin/gcc-[0-9]* | sort -V | tail -n1)"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER="$GCC_BIN" \
+            -DCMAKE_CXX_COMPILER="${GCC_BIN/gcc-/g++-}" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
+            -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
+            -DAI_TYPES=NONE \
+            -DBUILD_spring-dedicated=OFF
+          cmake --build build --target spring-headless pr-downloader_cli basecontent
+          ccache --show-stats
+          mkdir install
+          cp build/spring-headless build/tools/pr-downloader/src/pr-downloader install/
+          cp -R build/base install/
+
+      - name: Save compiler cache
+        if: ${{ !cancelled() && matrix.platform == 'arm64-macos' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ccache-headless-${{ matrix.branch }}-${{ github.run_id }}
+
+      - name: Restore BAR content cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            bar-data/pool
+            bar-data/packages
+            bar-data/maps
+          key: bar-data-${{ env.GAME }}-${{ env.MAP }}
+
+      - name: Fetch pinned BAR assets
+        env:
+          PRD_RAPID_USE_STREAMER: 'false'
+          PRD_RAPID_REPO_MASTER: https://repos-cdn.beyondallreason.dev/repos.gz
+          PRD_HTTP_SEARCH_URL: https://files-cdn.beyondallreason.dev/find
+        run: |
+          ./install/pr-downloader --filesystem-writepath "$PWD/bar-data" \
+            --download-game "$GAME" --download-map "$MAP"
+
+      - name: Run synctest
+        run: |
+          sed -e "s/@VERSION@/${GAME##* }/g" -e "s/@MAPNAME@/$MAP/g" \
+            test/synctest/synctest-startscript.txt > startscript.txt
+          ./install/spring-headless --isolation --write-dir "$PWD/bar-data" startscript.txt > infolog.txt 2>&1 \
+            || { tail -n 50 infolog.txt; exit 1; }
+          digest="$(jq -r '.digest // empty' "bar-data/$HASH_FILE")"
+          [ -n "$digest" ] || { echo "::error::no sync hash written"; tail -n 50 infolog.txt; exit 1; }
+          echo "Sync hash digest: $digest"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synctest-${{ matrix.branch }}-${{ matrix.platform }}
+          path: |
+            infolog.txt
+            bar-data/${{ env.HASH_FILE }}
+          retention-days: 30
+          if-no-files-found: ignore
+
+  compare:
+    if: ${{ !cancelled() && github.repository != 'beyond-all-reason/RecoilEngine' }}
+    needs: synctest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: synctest-*
+          path: artifacts
+
+      - name: Compare sync hashes
+        run: |
+          status=0
+          for branch in macos-port-2026.07.04 macos-port-2026.09.01; do
+            mac="$(jq -r '.digest // empty' "artifacts/synctest-$branch-arm64-macos/bar-data/$HASH_FILE" 2>/dev/null || true)"
+            ref="$(jq -r '.digest // empty' "artifacts/synctest-$branch-amd64-linux/bar-data/$HASH_FILE" 2>/dev/null || true)"
+            echo "$branch: macOS ${mac:-MISSING}, amd64-linux ${ref:-MISSING}"
+            if [ -z "$mac" ] || [ -z "$ref" ]; then
+              echo "::error::$branch: sync hash missing"
+              status=1
+            elif [ "$mac" != "$ref" ]; then
+              echo "::error::$branch: DESYNC, the macOS engine differs from the official amd64-linux engine"
+              status=1
+            fi
+          done
+          exit $status
