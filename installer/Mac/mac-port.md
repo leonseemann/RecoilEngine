@@ -40,18 +40,15 @@ benchmark).
 ## Mesa
 
 `installer/Mac/make-mesa.sh` builds EGL, Zink and KosmicKrisp from a pinned
-Mesa (26.2.4) with these patches:
+Mesa (26.3.0-rc1) without patches: the Zink vertex input fix (mesa!45132), the
+KosmicKrisp double init fix (e4174f891a8c) and renderpass tracking for
+KosmicKrisp (95c504fa) are upstream, and KosmicKrisp now records one command
+buffer per VkCommandBuffer, which replaces our command allocator trim.
 
-| Patch | Status |
-|---|---|
-| 0001 Zink: refetch the pipeline on a vertex input change (fixes vanishing display-list text and purple stripes) | Upstream as mesa!45132, contained in 26.2.5 |
-| 0002 KosmicKrisp: fix the double init in the Metal bridge (leaked a descriptor array per render pass) | Backport of upstream e4174f891a8c (Mesa 26.3) |
-| 0003 KosmicKrisp: drop command allocators that outgrew their use (30-70 GB footprint after a few games) | Ours, not upstream |
-| 0004 Zink: enable renderpass tracking for KosmicKrisp (about +3 % fps in the 150-unit benchmark: 71.5 vs 69.1 fps mean, 6 runs against 10, faster in every interleaved pair, identical screenshots) | Backport of upstream 95c504fa (Mesa 26.3) |
-
-Mesa 26.3 / main is currently slower on this workload, because KosmicKrisp ends
-the render encoder for every compute dispatch and unrolls draws for flat
-shading. That is why the version is pinned.
+KosmicKrisp from 26.3 on emulates GL's last-vertex provoking convention by
+unrolling every draw with flat varyings. The engine asks for first-vertex
+provoking on KosmicKrisp (tomjn, upstream #3532), so Mesa and engine have to be
+updated together.
 
 ## Building and releasing
 
@@ -165,3 +162,9 @@ What Claude Code did, by area:
   tracking for KosmicKrisp (patch 0004) after measuring about +3% fps.
   Tested with the benchmark, a CI-built engine and the keyboard aliases by
   hand.
+- **Mesa 26.3 (2026-10-17)**: picked tomjn's first-vertex provoking change
+  (#3532), moved the build to 26.3.0-rc1 and dropped all four patches. Same
+  spring binary against 26.2.4 and 26.3: 150-unit benchmark 67.3/65.3 vs
+  65.1/68.8 fps; 3-game lobby cycle in-game 44-48 vs 59 fps, peak GPU
+  allocation 40 vs 11 GB; 650 vs 650 battle footprint ~17 GB (39 GB peak) vs
+  ~9 GB. Display-list text test clean, screenshots identical.
