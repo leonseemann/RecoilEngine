@@ -1,0 +1,38 @@
+vbo: don't draw one vertex too many when a line loop ends after a wrap
+
+Without native GL_LINE_LOOP support (Zink) glEnd() turns a line loop into
+a line strip by appending vertex 0. If the loop continued after a vertex
+buffer wrap, vertex 0 is the copied vertex at the start of the draw, so
+the draw skips it with start++ and keeps its count. The count was still
+incremented for drivers without line loops, so the strip took one more
+vertex: the first vertex of the next primitive, drawn as a stray line.
+
+--- a/src/mesa/vbo/vbo_exec_api.c
++++ b/src/mesa/vbo/vbo_exec_api.c
+@@ -960,10 +960,14 @@
+          /* copy 0th vertex to end of buffer */
+          memcpy(dst, src, exec->vtx.vertex_size * sizeof(fi_type));
+ 
++         /* Either skip vertex0 (the count stays unchanged), or keep it and
++          * extend the draw by the appended vertex.
++          */
+          if (exec->vtx.markers[last].begin == 0)
+-            last_draw->start++; /* skip vertex0 */
++            last_draw->start++;
++         else
++            last_draw->count++;
+ 
+-         /* note that the count stays unchanged */
+          exec->vtx.mode[last] = GL_LINE_STRIP;
+ 
+          /* Increment the vertex count so the next primitive doesn't
+@@ -971,9 +975,6 @@
+           */
+          exec->vtx.vert_count++;
+          exec->vtx.buffer_ptr += exec->vtx.vertex_size;
+-
+-         if (!driver_supports_lineloop)
+-            last_draw->count++;
+       }
+ 
+       try_vbo_merge(exec);
