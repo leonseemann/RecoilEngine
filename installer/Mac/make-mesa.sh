@@ -3,12 +3,12 @@
 # patches from installer/Mac/mesa-patches applied.
 #
 # The version is pinned on purpose: KosmicKrisp from Mesa 26.3 on unrolls every
-# draw whose fragment shader has flat inputs and restarts the render pass for it,
-# which costs BAR most of its frame rate.
+# draw whose fragment shader has flat inputs unless the engine asks for
+# first-vertex provoking, so the engine and Mesa have to move together.
 #
 # Usage: make-mesa.sh <work dir> <install prefix>
 # Env:
-#   MESA_VERSION   default: 26.2.4
+#   MESA_VERSION   default: 26.3.0-rc1
 #   MOLTENVK_DIR   default: $(brew --prefix molten-vk), only its headers are used
 #   LLVM_PREFIX    default: $(brew --prefix llvm), for KosmicKrisp's kernels
 set -euo pipefail
@@ -16,7 +16,7 @@ set -euo pipefail
 WORK_DIR="$(mkdir -p "$1" && cd "$1" && pwd)"
 PREFIX="$(mkdir -p "$2" && cd "$2" && pwd)"
 SRC_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-MESA_VERSION="${MESA_VERSION:-26.2.4}"
+MESA_VERSION="${MESA_VERSION:-26.3.0-rc1}"
 MOLTENVK_DIR="${MOLTENVK_DIR:-$(brew --prefix molten-vk)}"
 LLVM_PREFIX="${LLVM_PREFIX:-$(brew --prefix llvm)}"
 MESA_SRC="$WORK_DIR/mesa-$MESA_VERSION"
@@ -37,6 +37,7 @@ if [ ! -d "$MESA_SRC" ]; then
 	mkdir -p "$MESA_SRC"
 	tar -xf "$MESA_TARBALL" -C "$MESA_SRC" --strip-components 1
 	for p in "$SRC_DIR"/installer/Mac/mesa-patches/*.patch; do
+		[ -e "$p" ] || continue
 		patch -d "$MESA_SRC" -p1 < "$p"
 	done
 fi
