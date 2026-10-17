@@ -40,10 +40,15 @@ benchmark).
 ## Mesa
 
 `installer/Mac/make-mesa.sh` builds EGL, Zink and KosmicKrisp from a pinned
-Mesa (26.3.0-rc1) without patches: the Zink vertex input fix (mesa!45132), the
-KosmicKrisp double init fix (e4174f891a8c) and renderpass tracking for
-KosmicKrisp (95c504fa) are upstream, and KosmicKrisp now records one command
-buffer per VkCommandBuffer, which replaces our command allocator trim.
+Mesa (26.3.0-rc1). The Zink vertex input fix (mesa!45132), the KosmicKrisp
+double init fix (e4174f891a8c) and renderpass tracking for KosmicKrisp
+(95c504fa) are upstream, and KosmicKrisp now records one command buffer per
+VkCommandBuffer, which replaces our command allocator trim. One patch is left:
+
+- `0001` fixes `glEnd()` for line loops that continue after a vertex buffer
+  wrap on drivers without native line loops (Zink): the strip took the first
+  vertex of the next primitive, so consecutive `GL_LINE_LOOP` blocks got stray
+  lines between them. Submitted upstream as mesa!45329.
 
 KosmicKrisp from 26.3 on emulates GL's last-vertex provoking convention by
 unrolling every draw with flat varyings. The engine asks for first-vertex
@@ -168,3 +173,8 @@ What Claude Code did, by area:
   65.1/68.8 fps; 3-game lobby cycle in-game 44-48 vs 59 fps, peak GPU
   allocation 40 vs 11 GB; 650 vs 650 battle footprint ~17 GB (39 GB peak) vs
   ~9 GB. Display-list text test clean, screenshots identical.
+- **Line loop stray lines (2026-10-17)**: traced the stray lines between
+  `gl.BeginEnd(GL.LINE_LOOP)` blocks (upstream #3533 works around them in the
+  engine) to Mesa's vbo module and wrote patch 0001. Tested with a standalone
+  EGL program drawing 4000 loops on Zink over KosmicKrisp: 2-6 stray pixels at
+  every vertex buffer wrap before, none after, pixel counts equal to llvmpipe.
