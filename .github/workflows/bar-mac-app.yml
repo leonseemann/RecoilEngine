@@ -18,11 +18,13 @@ on:
   pull_request:
     paths-ignore:
       - '**.md'
+      - '.github/workflows/mac-synctest.yml'
   push:
     branches:
       - 'macos-port-*'
     paths-ignore:
       - '**.md'
+      - '.github/workflows/mac-synctest.yml'
     tags:
       - 'bar-mac-v*'
 
