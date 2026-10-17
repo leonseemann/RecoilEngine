@@ -48,7 +48,7 @@ VkCommandBuffer, which replaces our command allocator trim. One patch is left:
 - `0001` fixes `glEnd()` for line loops that continue after a vertex buffer
   wrap on drivers without native line loops (Zink): the strip took the first
   vertex of the next primitive, so consecutive `GL_LINE_LOOP` blocks got stray
-  lines between them. Not upstream yet.
+  lines between them. Submitted upstream as mesa!45329.
 
 KosmicKrisp from 26.3 on emulates GL's last-vertex provoking convention by
 unrolling every draw with flat varyings. The engine asks for first-vertex
