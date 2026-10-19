@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch streflop
+        run: git submodule update --init --depth 1 rts/lib/streflop
+
       - name: Configure
         run: cmake -B build -S tools/sync-test -DCMAKE_BUILD_TYPE=Release -DSTREFLOP_MODE=SSE
 
