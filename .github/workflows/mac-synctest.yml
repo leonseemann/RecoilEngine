@@ -94,13 +94,17 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DOPENAL_INCLUDE_DIR="$(brew --prefix openal-soft)/include/AL" \
             -DOPENAL_LIBRARY="$(brew --prefix openal-soft)/lib/libopenal.dylib" \
-            -DAI_TYPES=NONE \
+            -DAI_TYPES=NATIVE \
             -DBUILD_spring-dedicated=OFF
-          cmake --build build --target spring-headless pr-downloader_cli basecontent
+          cmake --build build --target spring-headless pr-downloader_cli basecontent C-AIInterface NullAI
           ccache --show-stats
           mkdir install
           cp build/spring-headless build/tools/pr-downloader/src/pr-downloader install/
           cp -R build/base install/
+          # the start script gives team 1 to NullAI, which the official engine ships
+          for ai in AI/Interfaces/C AI/Skirmish/NullAI; do
+            cmake -DCMAKE_INSTALL_PREFIX="$PWD/install" -P "build/$ai/cmake_install.cmake"
+          done
 
       - name: Save compiler cache
         if: ${{ !cancelled() && matrix.platform == 'arm64-macos' }}
