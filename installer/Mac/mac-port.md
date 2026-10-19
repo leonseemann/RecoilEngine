@@ -179,3 +179,8 @@ What Claude Code did, by area:
   engine) to Mesa's vbo module and wrote patch 0001. Tested with a standalone
   EGL program drawing 4000 loops on Zink over KosmicKrisp: 2-6 stray pixels at
   every vertex buffer wrap before, none after, pixel counts equal to llvmpipe.
+- **Release tag version (2026-10-19)**: the annotated `<ver>-mac.<n>` release
+  tags won over the version tag in `git describe`, so the engine reported
+  `2026.07.04-mac.1` and BAR failed to load (`Engine.versionMajor` not a
+  number). The version lookup now skips `*-mac.*` tags. Found by the sync
+  test.
