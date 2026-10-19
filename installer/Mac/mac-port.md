@@ -58,18 +58,19 @@ updated together.
 ## Building and releasing
 
 - Dependencies come from Homebrew; CI installs them in
-  `.github/workflows/bar-mac-app.yml`. The compiler is Homebrew GCC,
+  `.github/workflows/engine-build-macos.yml`. The compiler is Homebrew GCC,
   like the upstream Linux/Windows builds.
 - `installer/Mac/make-mesa.sh` builds the Mesa prefix.
-- `installer/Mac/make-bar-engine.sh` assembles `Engine.app`, bundles the dylibs
-  (`bundle-dylibs.py`), signs it and packs `recoil_<version>_arm64-macos.7z` in
-  the layout BAR's launcher expects.
-- CI builds every `macos-port-*` push. A `bar-mac-v*` tag builds, notarizes and
-  publishes a release in the fork.
+- `installer/Mac/make-engine.sh` assembles `Engine.app`, bundles the dylibs
+  (`bundle-dylibs.py`), signs it and packs `recoil_<version>_arm64-macos.7z`,
+  the macOS counterpart of the Linux and Windows engine archives.
+- CI builds every `macos-port-*` push. A tag `<engine version>-mac.<n>` (e.g.
+  `2026.09.01-mac.1`) builds, notarizes and publishes a release in the fork.
 
-Players install the macOS build of the BAR launcher from
-github.com/leonseemann/spring-launcher (branches `mac-support` and `bar-mac`).
-The launcher downloads this engine from the fork's releases.
+Games use this engine like the upstream archives. For BAR, the macOS launcher
+is built from a BYAR-Chobby fork (github.com/leonseemann/BYAR-Chobby) on top of
+spring-launcher's `mac-support` branch, the same way BAR builds its Linux and
+Windows launchers.
 
 ## Branches
 
@@ -152,7 +153,7 @@ What Claude Code did, by area:
   and displays.
 - **Build and release**: the GCC build, the Mesa build script, engine
   packaging, notarization, CI caching and the release flow. Also the macOS port
-  of the BAR launcher (separate repository).
+  of spring-launcher and BAR's launcher build (separate repositories).
 - **Verification tooling**: the replay sync rig (including the Docker x86
   reference) and the benchmark and lobby-cycle rigs.
 - **Cleanup (2026-10-16)**: an audit of the whole port; three bug fixes (DDS
