@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Beyond All Reason</string>
+	<string>Recoil</string>
 	<key>CFBundleExecutable</key>
 	<string>spring</string>
 	<key>CFBundleIdentifier</key>
 	<string>###BUNDLE_ID###</string>
 	<key>CFBundleName</key>
-	<string>Beyond All Reason</string>
+	<string>Recoil</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
