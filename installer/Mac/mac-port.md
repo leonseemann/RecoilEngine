@@ -29,7 +29,7 @@ comes from.
 |---|---|
 | `wideLines` (every line is 1 px) | The bridge redraws line primitives with the viewport shifted by whole pixels |
 | `fillModeNonSolid` (`GL_LINE` polygon mode fills) | A runtime probe (`supportPolygonModeLine`); Lua `gl.PolygonMode` lines are emulated, and rect outlines are drawn as lines |
-| Working geometry shaders (Zink exposes them, but they draw nothing) | Lua shaders with a geometry stage are refused, so BAR's widgets use their fallbacks without geometry shaders |
+| Working geometry shaders (Zink exposes them, but they draw nothing) | Lua shaders with a geometry stage are refused, so BAR's widgets use their fallbacks without geometry shaders; the native nano particles use their instanced path |
 | GPU mipmap generation for S3TC | DDS textures that need generated mipmaps are uploaded decompressed |
 
 Primitive restart on list primitives makes KosmicKrisp unroll every draw in a
@@ -184,3 +184,10 @@ What Claude Code did, by area:
   `2026.07.04-mac.1` and BAR failed to load (`Engine.versionMajor` not a
   number). The version lookup now skips `*-mac.*` tags. Found by the sync
   test.
+- **Invisible nano particles (2026-10-19)**: with `NanoParticlesGL4 = 1` builders
+  sprayed nothing. The native nano particle renderer took its geometry shader
+  path, which links on Zink but draws nothing on KosmicKrisp, and ignored
+  `supportGeometryShaders`. It now goes straight to the instanced path there.
+  Bisected with shader overrides from a game archive (even a fixed clip-space
+  quad from the geometry stage stayed invisible); the instanced path was
+  checked by eye in a skirmish with 36 builders.
