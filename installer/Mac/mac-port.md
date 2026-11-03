@@ -49,6 +49,7 @@ Mesa (26.2.4) with these patches:
 | 0003 KosmicKrisp: drop command allocators that outgrew their use (30-70 GB footprint after a few games) | Ours, not upstream |
 | 0004 Zink: enable renderpass tracking for KosmicKrisp (about +3 % fps in the 150-unit benchmark: 71.5 vs 69.1 fps mean, 6 runs against 10, faster in every interleaved pair, identical screenshots) | Backport of upstream 95c504fa (Mesa 26.3) |
 | 0005 vbo: don't draw one vertex too many when a line loop ends after a vertex buffer wrap (stray lines between consecutive `GL_LINE_LOOP` blocks on Zink) | Ours, submitted upstream as mesa!45329 |
+| 0006 gallium/tc: do not carry an ended renderpass into the next batch (single frames with blocks flipped vertically and red/blue swapped, with renderpass tracking on) | From tomjn's integration branch, reported upstream as mesa#16734 |
 
 Mesa 26.3 / main is currently slower on this workload, because KosmicKrisp ends
 the render encoder for every compute dispatch and unrolls draws for flat
